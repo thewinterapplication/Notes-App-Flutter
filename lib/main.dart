@@ -9,7 +9,7 @@ import 'package:screen_protector/screen_protector.dart';
 /// API Service to connect to server
 class ApiService {
   // Single source of truth - use machine IP for all platforms
-  static const String baseUrl = 'http://192.168.1.46:3000';
+  static const String baseUrl = 'https://notes-app-server-wczw.onrender.com';
 
   static Future<Map<String, dynamic>> login(String phone) async {
     try {
@@ -1312,6 +1312,9 @@ class PdfViewerScreen extends StatefulWidget {
 }
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
+  // Toggle screenshot protection: set to true to enable, false to disable
+  static const bool enableScreenshotProtection = true;
+
   late PdfControllerPinch _pdfController;
 
   @override
@@ -1324,11 +1327,15 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 
   Future<void> _enableSecureMode() async {
-    await ScreenProtector.preventScreenshotOn();
+    if (enableScreenshotProtection) {
+      await ScreenProtector.preventScreenshotOn();
+    }
   }
 
   Future<void> _disableSecureMode() async {
-    await ScreenProtector.preventScreenshotOff();
+    if (enableScreenshotProtection) {
+      await ScreenProtector.preventScreenshotOff();
+    }
   }
 
   Future<PdfDocument> _loadDocument() async {
@@ -2152,8 +2159,9 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
         if (loginResult['success']) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('userPhone', widget.phoneNumber);
-          if (loginResult['data'] != null && loginResult['data']['name'] != null) {
-            await prefs.setString('userName', loginResult['data']['name']);
+          final backendData = loginResult['data'];
+          if (backendData != null && backendData['data'] != null && backendData['data']['name'] != null) {
+            await prefs.setString('userName', backendData['data']['name']);
           }
 
           if (mounted) {

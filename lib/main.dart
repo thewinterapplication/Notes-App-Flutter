@@ -1527,6 +1527,12 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     super.dispose();
   }
 
+  void _goToPage(int page) {
+    if (page >= 1 && page <= _totalPages) {
+      _pageController?.jumpToPage(page);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1534,22 +1540,24 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // Show different viewer based on mode
-            if (_singlePageMode)
-              PdfView(
-                controller: _pageController!,
-                scrollDirection: Axis.horizontal,
-                pageSnapping: true,
-                onPageChanged: _onPageChanged,
-              )
-            else
-              PdfViewPinch(
-                controller: _scrollController!,
-              ),
-            // Toggle button - bottom left
+            // Main PDF viewer with padding for thumbnail strip
+            Positioned.fill(
+              bottom: _singlePageMode && _totalPages > 0 ? 100 : 0,
+              child: _singlePageMode
+                  ? PdfView(
+                      controller: _pageController!,
+                      scrollDirection: Axis.horizontal,
+                      pageSnapping: true,
+                      onPageChanged: _onPageChanged,
+                    )
+                  : PdfViewPinch(
+                      controller: _scrollController!,
+                    ),
+            ),
+            // Toggle button - top right
             Positioned(
-              left: 16,
-              bottom: 16,
+              right: 16,
+              top: 16,
               child: Container(
                 decoration: BoxDecoration(
                   color: Colors.black.withOpacity(0.6),
@@ -1563,89 +1571,225 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 10),
-                        child: Text(
-                          _singlePageMode ? 'Book Mode' : 'Scroll Mode',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _singlePageMode ? Icons.menu_book : Icons.view_day,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _singlePageMode ? 'Book' : 'Scroll',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                    if (_totalPages > 0)
-                      Container(
-                        padding: const EdgeInsets.only(right: 14),
-                        child: Text(
-                          '$_currentPage / $_totalPages',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
                   ],
                 ),
               ),
             ),
-            // Navigation buttons - only show in book mode
-            if (_singlePageMode) ...[
-              // Previous button - left center
+            // Page indicator - top left
+            if (_totalPages > 0)
               Positioned(
-                left: 8,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: _currentPage > 1
-                          ? Colors.black.withOpacity(0.5)
-                          : Colors.black.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: Icon(
-                        Icons.chevron_left,
-                        color: _currentPage > 1
-                            ? Colors.white
-                            : Colors.white.withOpacity(0.3),
-                        size: 32,
-                      ),
-                      onPressed: _currentPage > 1 ? _goToPreviousPage : null,
+                left: 16,
+                top: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '$_currentPage / $_totalPages',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
               ),
-              // Next button - right center
+            // Thumbnail strip - bottom (only in book mode)
+            if (_singlePageMode && _totalPages > 0)
               Positioned(
-                right: 8,
-                top: 0,
+                left: 0,
+                right: 0,
                 bottom: 0,
-                child: Center(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: _currentPage < _totalPages
-                          ? Colors.black.withOpacity(0.5)
-                          : Colors.black.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: Icon(
-                        Icons.chevron_right,
-                        color: _currentPage < _totalPages
-                            ? Colors.white
-                            : Colors.white.withOpacity(0.3),
-                        size: 32,
-                      ),
-                      onPressed:
-                          _currentPage < _totalPages ? _goToNextPage : null,
-                    ),
+                height: 100,
+                child: Container(
+                  color: Colors.black.withOpacity(0.9),
+                  child: FutureBuilder<PdfDocument>(
+                    future: _documentFuture,
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            color: Colors.white54,
+                            strokeWidth: 2,
+                          ),
+                        );
+                      }
+                      return ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        itemCount: _totalPages,
+                        itemBuilder: (context, index) {
+                          final pageNum = index + 1;
+                          final isSelected = pageNum == _currentPage;
+                          return GestureDetector(
+                            onTap: () => _goToPage(pageNum),
+                            child: Container(
+                              width: 60,
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: isSelected ? Colors.blue : Colors.white24,
+                                  width: isSelected ? 2 : 1,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(3),
+                                    child: PdfThumbnail(
+                                      document: snapshot.data!,
+                                      pageNumber: pageNum,
+                                      backgroundColor: Colors.white,
+                                    ),
+                                  ),
+                                  // Page number overlay
+                                  Positioned(
+                                    bottom: 2,
+                                    right: 2,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 1,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? Colors.blue
+                                            : Colors.black.withOpacity(0.7),
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                      child: Text(
+                                        '$pageNum',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
                   ),
                 ),
               ),
-            ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+// Custom widget to render PDF page thumbnail
+class PdfThumbnail extends StatefulWidget {
+  final PdfDocument document;
+  final int pageNumber;
+  final Color backgroundColor;
+
+  const PdfThumbnail({
+    super.key,
+    required this.document,
+    required this.pageNumber,
+    this.backgroundColor = Colors.white,
+  });
+
+  @override
+  State<PdfThumbnail> createState() => _PdfThumbnailState();
+}
+
+class _PdfThumbnailState extends State<PdfThumbnail> {
+  PdfPageImage? _pageImage;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPage();
+  }
+
+  Future<void> _loadPage() async {
+    try {
+      final page = await widget.document.getPage(widget.pageNumber);
+      final pageImage = await page.render(
+        width: page.width * 0.3,
+        height: page.height * 0.3,
+        format: PdfPageImageFormat.png,
+        backgroundColor: '#FFFFFF',
+      );
+      if (mounted) {
+        setState(() {
+          _pageImage = pageImage;
+          _isLoading = false;
+        });
+      }
+      await page.close();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Container(
+        color: widget.backgroundColor,
+        child: const Center(
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 1,
+              color: Colors.grey,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_pageImage?.bytes != null) {
+      return Image.memory(
+        _pageImage!.bytes,
+        fit: BoxFit.cover,
+      );
+    }
+
+    return Container(
+      color: widget.backgroundColor,
+      child: const Center(
+        child: Icon(Icons.error_outline, size: 16, color: Colors.grey),
       ),
     );
   }

@@ -1,4 +1,4 @@
-package com.xpert.notes
+package com.experts.notes
 
 import io.flutter.embedding.android.FlutterActivity
 

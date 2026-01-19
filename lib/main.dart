@@ -1,22 +1,69 @@
 import 'dart:ui';
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdfx/pdfx.dart';
 import 'package:screen_protector/screen_protector.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+/// App Constants
+const String AppName = 'eXpert Notes';
 
 /// API Service to connect to server
 class ApiService {
   // Single source of truth - use machine IP for all platforms
   static const String baseUrl = 'https://notes-app-server-wczw.onrender.com';
 
+  // Retry configuration for Render.com free tier (server may be sleeping)
+  static const int maxRetries = 3;
+  static const Duration retryDelay = Duration(seconds: 3);
+  static const Duration requestTimeout = Duration(seconds: 30);
+
+  // Helper method to make HTTP requests with retry logic
+  static Future<http.Response> _postWithRetry(String url, Map<String, dynamic> body) async {
+    Exception? lastError;
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await http.post(
+          Uri.parse(url),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        ).timeout(requestTimeout);
+      } catch (e) {
+        lastError = e as Exception;
+        if (attempt < maxRetries) {
+          await Future.delayed(retryDelay * attempt);
+        }
+      }
+    }
+    throw lastError ?? Exception('Request failed after $maxRetries attempts');
+  }
+
+  static Future<http.Response> _getWithRetry(String url) async {
+    Exception? lastError;
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await http.get(
+          Uri.parse(url),
+          headers: {'Content-Type': 'application/json'},
+        ).timeout(requestTimeout);
+      } catch (e) {
+        lastError = e as Exception;
+        if (attempt < maxRetries) {
+          await Future.delayed(retryDelay * attempt);
+        }
+      }
+    }
+    throw lastError ?? Exception('Request failed after $maxRetries attempts');
+  }
+
   static Future<Map<String, dynamic>> login(String phone) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'phone': phone}),
+      final response = await _postWithRetry(
+        '$baseUrl/api/login',
+        {'phone': phone},
       );
 
       if (response.statusCode == 200) {
@@ -26,16 +73,15 @@ class ApiService {
         return {'success': false, 'message': error['message'] ?? 'Login failed'};
       }
     } catch (e) {
-      return {'success': false, 'message': 'Connection error: $e'};
+      return {'success': false, 'message': 'Server is starting up. Please wait and try again.'};
     }
   }
 
   static Future<Map<String, dynamic>> register(String name, String phone) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/register'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'name': name, 'phone': phone}),
+      final response = await _postWithRetry(
+        '$baseUrl/api/register',
+        {'name': name, 'phone': phone},
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -45,7 +91,7 @@ class ApiService {
         return {'success': false, 'message': error['message'] ?? 'Registration failed'};
       }
     } catch (e) {
-      return {'success': false, 'message': 'Connection error: $e'};
+      return {'success': false, 'message': 'Server is starting up. Please wait and try again.'};
     }
   }
 
@@ -55,10 +101,9 @@ class ApiService {
       // Add country code for India if not present
       final phoneWithCode = phone.startsWith('91') ? phone : '91$phone';
 
-      final response = await http.post(
-        Uri.parse('$baseUrl/otp/send'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'phoneNumber': phoneWithCode}),
+      final response = await _postWithRetry(
+        '$baseUrl/otp/send',
+        {'phoneNumber': phoneWithCode},
       );
 
       final data = jsonDecode(response.body);
@@ -68,17 +113,16 @@ class ApiService {
         return {'success': false, 'message': data['message'] ?? 'Failed to send OTP'};
       }
     } catch (e) {
-      return {'success': false, 'message': 'Connection error: $e'};
+      return {'success': false, 'message': 'Server is starting up. Please wait and try again.'};
     }
   }
 
   /// Verify OTP
   static Future<Map<String, dynamic>> verifyOTP(String sessionId, String otp) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/otp/verify'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'sessionId': sessionId, 'otp': otp}),
+      final response = await _postWithRetry(
+        '$baseUrl/otp/verify',
+        {'sessionId': sessionId, 'otp': otp},
       );
 
       final data = jsonDecode(response.body);
@@ -88,16 +132,15 @@ class ApiService {
         return {'success': false, 'message': data['message'] ?? 'Invalid OTP'};
       }
     } catch (e) {
-      return {'success': false, 'message': 'Connection error: $e'};
+      return {'success': false, 'message': 'Server is starting up. Please wait and try again.'};
     }
   }
 
   /// Fetch PDF files by subject/course abbreviation
   static Future<Map<String, dynamic>> getFilesBySubject(String subject) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/files/subject/${Uri.encodeComponent(subject)}'),
-        headers: {'Content-Type': 'application/json'},
+      final response = await _getWithRetry(
+        '$baseUrl/api/files/subject/${Uri.encodeComponent(subject)}',
       );
 
       if (response.statusCode == 200) {
@@ -110,7 +153,7 @@ class ApiService {
         return {'success': false, 'message': 'Failed to fetch files'};
       }
     } catch (e) {
-      return {'success': false, 'message': 'Connection error: $e'};
+      return {'success': false, 'message': 'Server is starting up. Please wait and try again.'};
     }
   }
 }
@@ -125,7 +168,7 @@ class NotesApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Notes App',
+      title: AppName,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
@@ -249,8 +292,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       ),
                     ),
                     const SizedBox(height: 30),
-                    const Text(
-                      'Notes App',
+                    Text(
+                      AppName,
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 32,
@@ -359,6 +402,32 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
   }
 
+  void _showComingSoonDialog(String featureName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.construction_rounded, color: Colors.orange.shade600),
+            const SizedBox(width: 12),
+            const Text('Coming Soon'),
+          ],
+        ),
+        content: Text(
+          '$featureName is currently under development and will be available soon!',
+          style: const TextStyle(fontSize: 15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // Responsive helper methods
   double _getScreenWidth(BuildContext context) => MediaQuery.of(context).size.width;
   double _getScreenHeight(BuildContext context) => MediaQuery.of(context).size.height;
@@ -367,9 +436,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _isDesktop(BuildContext context) => _getScreenWidth(context) >= 1024;
 
   int _getGridCrossAxisCount(BuildContext context) {
-    if (_isDesktop(context)) return 3;
-    if (_isTablet(context)) return 2;
-    return 1;
+    final width = _getScreenWidth(context);
+    if (width >= 1200) return 4;
+    if (width >= 900) return 3;
+    if (width >= 600) return 2;
+    return 1; // Single column for small screens
+  }
+
+  double _getCardAspectRatio(BuildContext context) {
+    final width = _getScreenWidth(context);
+    if (width >= 1200) return 1.4;
+    if (width >= 900) return 1.3;
+    if (width >= 600) return 1.2;
+    return 1.8; // Vertical cards for single column
   }
 
   double _getCardHeight(BuildContext context) {
@@ -612,7 +691,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     label: 'Bookmarks',
                     iconColor: const Color(0xFFFF9800),
                     bgColor: const Color(0xFFFF9800).withOpacity(0.1),
-                    onTap: () => Navigator.pop(context),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showComingSoonDialog('Bookmarks');
+                    },
                   ),
                   const SizedBox(height: 8),
                   _buildStyledMenuItem(
@@ -620,7 +702,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     label: 'Settings',
                     iconColor: const Color(0xFF9C27B0),
                     bgColor: const Color(0xFF9C27B0).withOpacity(0.1),
-                    onTap: () => Navigator.pop(context),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showComingSoonDialog('Settings');
+                    },
                   ),
                 ],
               ),
@@ -636,20 +721,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Column(
                 children: [
-                  _buildStyledMenuItem(
-                    icon: Icons.login_rounded,
-                    label: 'Login',
-                    iconColor: const Color(0xFF4CAF50),
-                    bgColor: const Color(0xFF4CAF50).withOpacity(0.1),
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const LoginPage()),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 8),
                   _buildStyledMenuItem(
                     icon: Icons.logout_rounded,
                     label: 'Logout',
@@ -692,6 +763,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           );
                         }
                       }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _buildStyledMenuItem(
+                    icon: Icons.privacy_tip_rounded,
+                    label: 'Privacy Policy',
+                    iconColor: const Color(0xFF2196F3),
+                    bgColor: const Color(0xFF2196F3).withOpacity(0.1),
+                    onTap: () {
+                      Navigator.pop(context);
+                      launchUrl(Uri.parse('https://notes-app-server-wczw.onrender.com/privacy-policy'));
                     },
                   ),
                 ],
@@ -794,37 +876,42 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           );
         }
 
+        // Use ListView for single column, GridView for multi-column
         if (crossAxisCount == 1) {
-          // Use ListView for mobile
           return Container(
             color: const Color(0xFFF5F5F5),
             child: ListView.builder(
-              padding: EdgeInsets.symmetric(horizontal: padding, vertical: padding),
-              itemCount: results.length,
-              itemBuilder: (context, index) {
-                return _buildCourseCard(results[index], cardHeight);
-              },
-            ),
-          );
-        } else {
-          // Use GridView for tablet/desktop
-          return Container(
-            color: const Color(0xFFF5F5F5),
-            child: GridView.builder(
               padding: EdgeInsets.all(padding),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
-                childAspectRatio: _isDesktop(context) ? 2.2 : 2.0,
-                crossAxisSpacing: padding,
-                mainAxisSpacing: padding,
-              ),
               itemCount: results.length,
               itemBuilder: (context, index) {
-                return _buildCourseCard(results[index], null);
+                return Padding(
+                  padding: EdgeInsets.only(bottom: padding * 0.75),
+                  child: SizedBox(
+                    height: 140,
+                    child: _buildCourseCard(results[index], 140),
+                  ),
+                );
               },
             ),
           );
         }
+
+        return Container(
+          color: const Color(0xFFF5F5F5),
+          child: GridView.builder(
+            padding: EdgeInsets.all(padding),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              childAspectRatio: _getCardAspectRatio(context),
+              crossAxisSpacing: padding * 0.75,
+              mainAxisSpacing: padding * 0.75,
+            ),
+            itemCount: results.length,
+            itemBuilder: (context, index) {
+              return _buildCourseCard(results[index], null);
+            },
+          ),
+        );
       },
     );
   }
@@ -836,11 +923,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         final titleFontSize = _getTitleFontSize(context);
         final bgIconSize = _getBackgroundIconSize(context);
         final padding = _getPadding(context);
-        final cardHeight = fixedHeight ?? constraints.maxHeight;
 
         return Container(
-          margin: fixedHeight != null ? EdgeInsets.only(bottom: padding) : EdgeInsets.zero,
-          height: fixedHeight,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(_isTablet(context) ? 16 : 12),
             gradient: LinearGradient(
@@ -873,28 +957,32 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 children: [
                   // Background pattern
                   Positioned(
-                    right: -20,
-                    top: -20,
-                    child: Icon(
-                      course.icon,
-                      size: bgIconSize,
-                      color: Colors.white.withOpacity(0.1),
+                    right: -10,
+                    top: 0,
+                    bottom: 0,
+                    child: Center(
+                      child: Icon(
+                        course.icon,
+                        size: bgIconSize,
+                        color: Colors.white.withOpacity(0.15),
+                      ),
                     ),
                   ),
-                  // Content
+                  // Content - centered icon and text
                   Center(
                     child: Padding(
                       padding: EdgeInsets.all(padding),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
                         mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             course.icon,
                             color: Colors.white,
                             size: iconSize,
                           ),
-                          SizedBox(height: cardHeight * 0.08),
+                          SizedBox(height: padding * 0.5),
                           Text(
                             course.fullName,
                             style: TextStyle(
@@ -1196,22 +1284,51 @@ class _CoursePdfListScreenState extends State<CoursePdfListScreen> {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: _fetchFiles,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _files.length,
-        itemBuilder: (context, index) {
-          final file = _files[index];
-          return _buildFileCard(file);
-        },
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = MediaQuery.of(context).size.width;
+        final isWideScreen = width >= 600;
+        final crossAxisCount = width >= 1200 ? 3 : width >= 800 ? 2 : 1;
+        final padding = isWideScreen ? 20.0 : 16.0;
+
+        if (crossAxisCount == 1) {
+          // Mobile: use ListView
+          return RefreshIndicator(
+            onRefresh: _fetchFiles,
+            child: ListView.builder(
+              padding: EdgeInsets.all(padding),
+              itemCount: _files.length,
+              itemBuilder: (context, index) {
+                return _buildFileCard(_files[index]);
+              },
+            ),
+          );
+        }
+
+        // Tablet/Desktop: use GridView
+        return RefreshIndicator(
+          onRefresh: _fetchFiles,
+          child: GridView.builder(
+            padding: EdgeInsets.all(padding),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              mainAxisExtent: 80,
+            ),
+            itemCount: _files.length,
+            itemBuilder: (context, index) {
+              return _buildFileCard(_files[index], isGrid: true);
+            },
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildFileCard(PdfFile file) {
+  Widget _buildFileCard(PdfFile file, {bool isGrid = false}) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: isGrid ? EdgeInsets.zero : const EdgeInsets.only(bottom: 12),
       elevation: 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
@@ -1313,17 +1430,49 @@ class PdfViewerScreen extends StatefulWidget {
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   // Toggle screenshot protection: set to true to enable, false to disable
-  static const bool enableScreenshotProtection = true;
+  static const bool enableScreenshotProtection = false;
 
-  late PdfControllerPinch _pdfController;
+  // Two controllers for two viewing modes
+  PdfController? _pageController; // For single page (book) mode
+  PdfControllerPinch? _scrollController; // For scroll mode
+
+  bool _singlePageMode = true; // Book mode is default
+  int _currentPage = 1;
+  int _totalPages = 0;
+  Future<PdfDocument>? _documentFuture;
 
   @override
   void initState() {
     super.initState();
     _enableSecureMode();
-    _pdfController = PdfControllerPinch(
-      document: _loadDocument(),
+    _documentFuture = _loadDocument();
+    _initControllers();
+  }
+
+  void _initControllers() {
+    _pageController = PdfController(
+      document: _documentFuture!,
     );
+    _scrollController = PdfControllerPinch(
+      document: _documentFuture!,
+    );
+    _scrollController!.addListener(_onScrollPageChanged);
+  }
+
+  void _onScrollPageChanged() {
+    if (mounted && !_singlePageMode) {
+      setState(() {
+        _currentPage = _scrollController!.page;
+      });
+    }
+  }
+
+  void _onPageChanged(int page) {
+    if (mounted) {
+      setState(() {
+        _currentPage = page;
+      });
+    }
   }
 
   Future<void> _enableSecureMode() async {
@@ -1340,13 +1489,41 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
   Future<PdfDocument> _loadDocument() async {
     final bytes = await http.readBytes(Uri.parse(widget.pdfUrl));
-    return PdfDocument.openData(bytes);
+    final doc = await PdfDocument.openData(bytes);
+    if (mounted) {
+      setState(() {
+        _totalPages = doc.pagesCount;
+      });
+    }
+    return doc;
+  }
+
+  void _goToPreviousPage() {
+    if (_currentPage > 1) {
+      _pageController?.previousPage(
+          duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+    }
+  }
+
+  void _goToNextPage() {
+    if (_currentPage < _totalPages) {
+      _pageController?.nextPage(
+          duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+    }
+  }
+
+  void _toggleViewMode() {
+    setState(() {
+      _singlePageMode = !_singlePageMode;
+    });
   }
 
   @override
   void dispose() {
     _disableSecureMode();
-    _pdfController.dispose();
+    _scrollController?.removeListener(_onScrollPageChanged);
+    _pageController?.dispose();
+    _scrollController?.dispose();
     super.dispose();
   }
 
@@ -1355,8 +1532,119 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: PdfViewPinch(
-          controller: _pdfController,
+        child: Stack(
+          children: [
+            // Show different viewer based on mode
+            if (_singlePageMode)
+              PdfView(
+                controller: _pageController!,
+                scrollDirection: Axis.horizontal,
+                pageSnapping: true,
+                onPageChanged: _onPageChanged,
+              )
+            else
+              PdfViewPinch(
+                controller: _scrollController!,
+              ),
+            // Toggle button - bottom left
+            Positioned(
+              left: 16,
+              bottom: 16,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(25),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: _toggleViewMode,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        child: Text(
+                          _singlePageMode ? 'Book Mode' : 'Scroll Mode',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (_totalPages > 0)
+                      Container(
+                        padding: const EdgeInsets.only(right: 14),
+                        child: Text(
+                          '$_currentPage / $_totalPages',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            // Navigation buttons - only show in book mode
+            if (_singlePageMode) ...[
+              // Previous button - left center
+              Positioned(
+                left: 8,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _currentPage > 1
+                          ? Colors.black.withOpacity(0.5)
+                          : Colors.black.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.chevron_left,
+                        color: _currentPage > 1
+                            ? Colors.white
+                            : Colors.white.withOpacity(0.3),
+                        size: 32,
+                      ),
+                      onPressed: _currentPage > 1 ? _goToPreviousPage : null,
+                    ),
+                  ),
+                ),
+              ),
+              // Next button - right center
+              Positioned(
+                right: 8,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _currentPage < _totalPages
+                          ? Colors.black.withOpacity(0.5)
+                          : Colors.black.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.chevron_right,
+                        color: _currentPage < _totalPages
+                            ? Colors.white
+                            : Colors.white.withOpacity(0.3),
+                        size: 32,
+                      ),
+                      onPressed:
+                          _currentPage < _totalPages ? _goToNextPage : null,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

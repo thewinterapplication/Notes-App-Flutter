@@ -9,7 +9,7 @@ import 'package:screen_protector/screen_protector.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// App Constants
-const String AppName = 'eXpert Notes';
+const String AppName = 'College Notes';
 
 /// API Service to connect to server
 class ApiService {
@@ -214,7 +214,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   Future<void> _checkAuthAndNavigate() async {
     // Wait for animation to complete
-    await Future.delayed(const Duration(milliseconds: 2000));
+    await Future.delayed(const Duration(milliseconds: 5000));
 
     final prefs = await SharedPreferences.getInstance();
     final userPhone = prefs.getString('userPhone');
@@ -253,7 +253,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF1A2530), Color(0xFF2D3E50), Color(0xFF3D5266)],
+            colors: [Color(0xFF4A90D9), Color(0xFF5B9BD5), Color(0xFF6BA3DB)],
           ),
         ),
         child: AnimatedBuilder(
@@ -271,24 +271,23 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       width: 120,
                       height: 120,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(30),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
-                          width: 2,
-                        ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
+                            color: Colors.white.withOpacity(0.3),
                             blurRadius: 20,
                             offset: const Offset(0, 10),
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.note_alt_rounded,
-                        size: 60,
-                        color: Colors.white,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(30),
+                        child: Image.asset(
+                          'assets/app_icon.png',
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 30),
@@ -1806,6 +1805,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _phoneController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -1825,7 +1825,7 @@ class _LoginPageState extends State<LoginPage> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF1A2530), Color(0xFF2D3E50), Color(0xFF3D5266)],
+            colors: [Color(0xFF4A90D9), Color(0xFF5B9BD5), Color(0xFF6BA3DB)],
           ),
         ),
         child: SafeArea(
@@ -1843,17 +1843,23 @@ class _LoginPageState extends State<LoginPage> {
                       width: 100,
                       height: 100,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
-                          width: 2,
-                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.white.withOpacity(0.3),
+                            blurRadius: 15,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
                       ),
-                      child: const Icon(
-                        Icons.note_alt_rounded,
-                        size: 50,
-                        color: Colors.white,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: Image.asset(
+                          'assets/app_icon.png',
+                          width: 100,
+                          height: 100,
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
 
@@ -1880,52 +1886,41 @@ class _LoginPageState extends State<LoginPage> {
 
                     SizedBox(height: size.height * 0.06),
 
-                    // Login Card - Glass Effect with Shine
+                    // Login Card - White Container
                     Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(24),
+                        color: Colors.white,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
+                            color: Colors.black.withOpacity(0.1),
                             blurRadius: 20,
                             offset: const Offset(0, 10),
                           ),
                         ],
                       ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                          child: Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(24),
-                              color: Colors.white.withOpacity(0.1),
-                              border: Border.all(
-                                width: 1.5,
-                                color: Colors.white.withOpacity(0.3),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Mobile Number',
+                              style: TextStyle(
+                                color: Color(0xFF333333),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Mobile Number',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
+                            const SizedBox(height: 8),
 
                               // Phone Input
                               Container(
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.15),
+                                  color: const Color(0xFFF5F5F5),
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: Colors.white.withOpacity(0.3),
+                                    color: const Color(0xFFE0E0E0),
                                   ),
                                 ),
                                 child: Row(
@@ -1933,9 +1928,9 @@ class _LoginPageState extends State<LoginPage> {
                                     // Country Code
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                      decoration: BoxDecoration(
+                                      decoration: const BoxDecoration(
                                         border: Border(
-                                          right: BorderSide(color: Colors.white.withOpacity(0.3)),
+                                          right: BorderSide(color: Color(0xFFE0E0E0)),
                                         ),
                                       ),
                                       child: const Row(
@@ -1948,7 +1943,7 @@ class _LoginPageState extends State<LoginPage> {
                                           Text(
                                             '+91',
                                             style: TextStyle(
-                                              color: Colors.white,
+                                              color: Color(0xFF333333),
                                               fontWeight: FontWeight.w600,
                                             ),
                                           ),
@@ -1963,13 +1958,13 @@ class _LoginPageState extends State<LoginPage> {
                                         style: const TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.w500,
-                                          color: Colors.white,
+                                          color: Color(0xFF333333),
                                         ),
-                                        decoration: InputDecoration(
+                                        decoration: const InputDecoration(
                                           hintText: 'Enter mobile number',
-                                          hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                                          hintStyle: TextStyle(color: Color(0xFF999999)),
                                           border: InputBorder.none,
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 16),
                                         ),
                                         validator: (value) {
                                           if (value == null || value.isEmpty) {
@@ -1993,29 +1988,53 @@ class _LoginPageState extends State<LoginPage> {
                                 width: double.infinity,
                                 height: 56,
                                 child: ElevatedButton(
-                                  onPressed: () async {
+                                  onPressed: _isLoading ? null : () async {
                                     if (_formKey.currentState!.validate()) {
-                                      // Send OTP first
-                                      final result = await ApiService.sendOTP(_phoneController.text);
+                                      setState(() {
+                                        _isLoading = true;
+                                      });
 
-                                      if (result['success']) {
-                                        if (mounted) {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) => OTPVerificationScreen(
-                                                phoneNumber: _phoneController.text,
-                                                sessionId: result['sessionId'],
-                                                isRegistration: false,
+                                      try {
+                                        // Send OTP first
+                                        final result = await ApiService.sendOTP(_phoneController.text);
+
+                                        if (result['success']) {
+                                          if (mounted) {
+                                            setState(() {
+                                              _isLoading = false;
+                                            });
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => OTPVerificationScreen(
+                                                  phoneNumber: _phoneController.text,
+                                                  sessionId: result['sessionId'],
+                                                  isRegistration: false,
+                                                ),
                                               ),
-                                            ),
-                                          );
+                                            );
+                                          }
+                                        } else {
+                                          if (mounted) {
+                                            setState(() {
+                                              _isLoading = false;
+                                            });
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text(result['message'] ?? 'Failed to send OTP'),
+                                                backgroundColor: Colors.red,
+                                              ),
+                                            );
+                                          }
                                         }
-                                      } else {
+                                      } catch (e) {
                                         if (mounted) {
+                                          setState(() {
+                                            _isLoading = false;
+                                          });
                                           ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text(result['message'] ?? 'Failed to send OTP'),
+                                            const SnackBar(
+                                              content: Text('Connection failed. Please try again.'),
                                               backgroundColor: Colors.red,
                                             ),
                                           );
@@ -2024,25 +2043,32 @@ class _LoginPageState extends State<LoginPage> {
                                     }
                                   },
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.white.withOpacity(0.85),
-                                    foregroundColor: const Color(0xFF2D3E50),
+                                    backgroundColor: const Color(0xFF4A90D9),
+                                    foregroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     elevation: 0,
                                   ),
-                                  child: const Text(
-                                    'Continue',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                                  child: _isLoading
+                                      ? const SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2.5,
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Continue',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                 ),
                               ),
-                              ],
-                            ),
-                          ),
+                          ],
                         ),
                       ),
                     ),
@@ -2108,6 +2134,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _phoneController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _agreeToTerms = false;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -2128,7 +2155,7 @@ class _RegisterPageState extends State<RegisterPage> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF1A2530), Color(0xFF2D3E50), Color(0xFF3D5266)],
+            colors: [Color(0xFF4A90D9), Color(0xFF5B9BD5), Color(0xFF6BA3DB)],
           ),
         ),
         child: SafeArea(
@@ -2146,17 +2173,23 @@ class _RegisterPageState extends State<RegisterPage> {
                       width: 100,
                       height: 100,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
-                          width: 2,
-                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.white.withOpacity(0.3),
+                            blurRadius: 15,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
                       ),
-                      child: const Icon(
-                        Icons.person_add_rounded,
-                        size: 50,
-                        color: Colors.white,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: Image.asset(
+                          'assets/app_icon.png',
+                          width: 100,
+                          height: 100,
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
 
@@ -2183,40 +2216,29 @@ class _RegisterPageState extends State<RegisterPage> {
 
                     SizedBox(height: size.height * 0.04),
 
-                    // Register Card - Glass Effect with Shine
+                    // Register Card - White Container
                     Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(24),
+                        color: Colors.white,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
+                            color: Colors.black.withOpacity(0.1),
                             blurRadius: 20,
                             offset: const Offset(0, 10),
                           ),
                         ],
                       ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                          child: Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(24),
-                              color: Colors.white.withOpacity(0.1),
-                              border: Border.all(
-                                width: 1.5,
-                                color: Colors.white.withOpacity(0.3),
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                                 // Name Field
                                 const Text(
                                   'Full Name',
                                   style: TextStyle(
-                                    color: Colors.white,
+                                    color: Color(0xFF333333),
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -2224,10 +2246,10 @@ class _RegisterPageState extends State<RegisterPage> {
                                 const SizedBox(height: 8),
                                 Container(
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.15),
+                                    color: const Color(0xFFF5F5F5),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                      color: Colors.white.withOpacity(0.3),
+                                      color: const Color(0xFFE0E0E0),
                                     ),
                                   ),
                                   child: TextFormField(
@@ -2235,14 +2257,14 @@ class _RegisterPageState extends State<RegisterPage> {
                                     style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w500,
-                                      color: Colors.white,
+                                      color: Color(0xFF333333),
                                     ),
-                                    decoration: InputDecoration(
+                                    decoration: const InputDecoration(
                                       hintText: 'Enter your full name',
-                                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                                      hintStyle: TextStyle(color: Color(0xFF999999)),
                                       border: InputBorder.none,
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                      prefixIcon: Icon(Icons.person_outline, color: Colors.white.withOpacity(0.7)),
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                      prefixIcon: Icon(Icons.person_outline, color: Color(0xFF999999)),
                                     ),
                                     validator: (value) {
                                       if (value == null || value.isEmpty) {
@@ -2259,7 +2281,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                 const Text(
                                   'Mobile Number',
                                   style: TextStyle(
-                                    color: Colors.white,
+                                    color: Color(0xFF333333),
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -2267,10 +2289,10 @@ class _RegisterPageState extends State<RegisterPage> {
                                 const SizedBox(height: 8),
                                 Container(
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.15),
+                                    color: const Color(0xFFF5F5F5),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                      color: Colors.white.withOpacity(0.3),
+                                      color: const Color(0xFFE0E0E0),
                                     ),
                                   ),
                                   child: Row(
@@ -2278,9 +2300,9 @@ class _RegisterPageState extends State<RegisterPage> {
                                       // Country Code
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                        decoration: BoxDecoration(
+                                        decoration: const BoxDecoration(
                                           border: Border(
-                                            right: BorderSide(color: Colors.white.withOpacity(0.3)),
+                                            right: BorderSide(color: Color(0xFFE0E0E0)),
                                           ),
                                         ),
                                         child: const Row(
@@ -2293,7 +2315,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                             Text(
                                               '+91',
                                               style: TextStyle(
-                                                color: Colors.white,
+                                                color: Color(0xFF333333),
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),
@@ -2308,13 +2330,13 @@ class _RegisterPageState extends State<RegisterPage> {
                                           style: const TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.w500,
-                                            color: Colors.white,
+                                            color: Color(0xFF333333),
                                           ),
-                                          decoration: InputDecoration(
+                                          decoration: const InputDecoration(
                                             hintText: 'Enter mobile number',
-                                            hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                                            hintStyle: TextStyle(color: Color(0xFF999999)),
                                             border: InputBorder.none,
-                                            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                                            contentPadding: EdgeInsets.symmetric(horizontal: 16),
                                           ),
                                           validator: (value) {
                                             if (value == null || value.isEmpty) {
@@ -2346,20 +2368,20 @@ class _RegisterPageState extends State<RegisterPage> {
                                             _agreeToTerms = value ?? false;
                                           });
                                         },
-                                        activeColor: Colors.white,
-                                        checkColor: const Color(0xFF2D3E50),
-                                        side: BorderSide(color: Colors.white.withOpacity(0.5)),
+                                        activeColor: const Color(0xFF4A90D9),
+                                        checkColor: Colors.white,
+                                        side: const BorderSide(color: Color(0xFFCCCCCC)),
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                       ),
                                     ),
                                     const SizedBox(width: 12),
-                                    Expanded(
+                                    const Expanded(
                                       child: Text(
                                         'I agree to the Terms & Conditions',
                                         style: TextStyle(
-                                          color: Colors.white.withOpacity(0.7),
+                                          color: Color(0xFF666666),
                                           fontSize: 13,
                                         ),
                                       ),
@@ -2374,7 +2396,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                   width: double.infinity,
                                   height: 56,
                                   child: ElevatedButton(
-                                    onPressed: () async {
+                                    onPressed: _isLoading ? null : () async {
                                       if (_formKey.currentState!.validate()) {
                                         if (!_agreeToTerms) {
                                           ScaffoldMessenger.of(context).showSnackBar(
@@ -2386,28 +2408,52 @@ class _RegisterPageState extends State<RegisterPage> {
                                           return;
                                         }
 
-                                        // Send OTP first
-                                        final result = await ApiService.sendOTP(_phoneController.text);
+                                        setState(() {
+                                          _isLoading = true;
+                                        });
 
-                                        if (result['success']) {
-                                          if (mounted) {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => OTPVerificationScreen(
-                                                  phoneNumber: _phoneController.text,
-                                                  sessionId: result['sessionId'],
-                                                  name: _nameController.text,
-                                                  isRegistration: true,
+                                        try {
+                                          // Send OTP first
+                                          final result = await ApiService.sendOTP(_phoneController.text);
+
+                                          if (result['success']) {
+                                            if (mounted) {
+                                              setState(() {
+                                                _isLoading = false;
+                                              });
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => OTPVerificationScreen(
+                                                    phoneNumber: _phoneController.text,
+                                                    sessionId: result['sessionId'],
+                                                    name: _nameController.text,
+                                                    isRegistration: true,
+                                                  ),
                                                 ),
-                                              ),
-                                            );
+                                              );
+                                            }
+                                          } else {
+                                            if (mounted) {
+                                              setState(() {
+                                                _isLoading = false;
+                                              });
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(result['message'] ?? 'Failed to send OTP'),
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              );
+                                            }
                                           }
-                                        } else {
+                                        } catch (e) {
                                           if (mounted) {
+                                            setState(() {
+                                              _isLoading = false;
+                                            });
                                             ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text(result['message'] ?? 'Failed to send OTP'),
+                                              const SnackBar(
+                                                content: Text('Connection failed. Please try again.'),
                                                 backgroundColor: Colors.red,
                                               ),
                                             );
@@ -2416,25 +2462,32 @@ class _RegisterPageState extends State<RegisterPage> {
                                       }
                                     },
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.white.withOpacity(0.85),
-                                      foregroundColor: const Color(0xFF2D3E50),
+                                      backgroundColor: const Color(0xFF4A90D9),
+                                      foregroundColor: Colors.white,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       elevation: 0,
                                     ),
-                                    child: const Text(
-                                      'Register',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
+                                    child: _isLoading
+                                        ? const SizedBox(
+                                            width: 24,
+                                            height: 24,
+                                            child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2.5,
+                                            ),
+                                          )
+                                        : const Text(
+                                            'Register',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
+                          ],
                         ),
                       ),
                     ),
@@ -2671,7 +2724,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF1A2530), Color(0xFF2D3E50), Color(0xFF3D5266)],
+            colors: [Color(0xFF4A90D9), Color(0xFF5B9BD5), Color(0xFF6BA3DB)],
           ),
         ),
         child: SafeArea(
@@ -2698,10 +2751,10 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                     width: 100,
                     height: 100,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.15),
+                      color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
+                        color: Colors.white.withOpacity(0.4),
                         width: 2,
                       ),
                     ),
@@ -2744,11 +2797,15 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                         height: 65,
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.15),
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.3),
-                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
                           child: TextField(
                             controller: _otpControllers[index],
@@ -2757,7 +2814,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                             textAlign: TextAlign.center,
                             maxLength: 1,
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: Color(0xFF333333),
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
                             ),
@@ -2790,12 +2847,12 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _verifyOTP,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white.withOpacity(0.85),
-                        foregroundColor: const Color(0xFF2D3E50),
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF4A90D9),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        elevation: 0,
+                        elevation: 2,
                       ),
                       child: _isLoading
                           ? const SizedBox(

@@ -3,7 +3,9 @@
     "allow": [
       "Bash(dir /s C:Projectsnotes_app)",
       "Bash(flutter analyze:*)",
-      "Bash(flutter pub get:*)"
+      "Bash(flutter pub get:*)",
+      "Bash(flutter clean:*)",
+      "Bash(flutter build:*)"
     ]
   }
 }

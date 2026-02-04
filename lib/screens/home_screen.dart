@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/course.dart';
 import '../providers/auth_provider.dart';
-import 'course_pdf_list_screen.dart';
+import 'course_subjects_screen.dart';
 import 'bookmarks_screen.dart';
 import 'splash_screen.dart';
 
@@ -607,7 +607,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => CoursePdfListScreen(course: course),
+                    builder: (context) => CourseSubjectsScreen(course: course),
                   ),
                 );
               },

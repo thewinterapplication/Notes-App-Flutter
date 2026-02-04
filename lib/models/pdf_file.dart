@@ -2,6 +2,7 @@
 class PdfFile {
   final String id;
   final String fileName;
+  final String course;
   final String subject;
   final String fileUrl;
   final int likesCount;
@@ -11,6 +12,7 @@ class PdfFile {
   PdfFile({
     required this.id,
     required this.fileName,
+    required this.course,
     required this.subject,
     required this.fileUrl,
     required this.likesCount,
@@ -22,6 +24,7 @@ class PdfFile {
     return PdfFile(
       id: json['_id'] ?? '',
       fileName: json['fileName'] ?? '',
+      course: json['course'] ?? 'uncategorized',
       subject: json['subject'] ?? 'uncategorized',
       fileUrl: json['fileUrl'] ?? '',
       likesCount: json['likesCount'] ?? 0,

@@ -146,11 +146,51 @@ class ApiService {
     }
   }
 
-  /// Fetch PDF files by subject/course abbreviation
+  /// Fetch PDF files by course (legacy - for backward compatibility)
   static Future<Map<String, dynamic>> getFilesBySubject(String subject) async {
     try {
       final response = await _getWithRetry(
         '$baseUrl/api/files/subject/${Uri.encodeComponent(subject)}',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final files = (data['files'] as List)
+            .map((json) => PdfFile.fromJson(json))
+            .toList();
+        return {'success': true, 'files': files};
+      } else {
+        return {'success': false, 'message': 'Failed to fetch files'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Server is starting up. Please wait and try again.'};
+    }
+  }
+
+  /// Fetch subjects for a course
+  static Future<Map<String, dynamic>> getSubjectsByCourse(String course) async {
+    try {
+      final response = await _getWithRetry(
+        '$baseUrl/api/courses/${Uri.encodeComponent(course)}/subjects',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final subjects = List<String>.from(data['subjects'] ?? []);
+        return {'success': true, 'subjects': subjects};
+      } else {
+        return {'success': false, 'message': 'Failed to fetch subjects'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Server is starting up. Please wait and try again.'};
+    }
+  }
+
+  /// Fetch PDF files by course and subject
+  static Future<Map<String, dynamic>> getFilesByCourseAndSubject(String course, String subject) async {
+    try {
+      final response = await _getWithRetry(
+        '$baseUrl/api/courses/${Uri.encodeComponent(course)}/subjects/${Uri.encodeComponent(subject)}/files',
       );
 
       if (response.statusCode == 200) {

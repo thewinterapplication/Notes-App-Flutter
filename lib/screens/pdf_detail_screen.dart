@@ -390,7 +390,8 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                     runSpacing: 8,
                     children: [
                       _buildTopicChip(course.abbreviation, course.gradientColors[0]),
-                      _buildTopicChip('Notes', course.gradientColors[1]),
+                      if (pdfFile.subject != 'uncategorized')
+                        _buildTopicChip(pdfFile.subject, course.gradientColors[1]),
                       _buildTopicChip('PDF', Colors.orange),
                     ],
                   ),

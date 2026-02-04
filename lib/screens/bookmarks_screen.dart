@@ -60,7 +60,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
 
   Course _getCourseForFile(PdfFile file) {
     return Course.allCourses.firstWhere(
-      (c) => c.abbreviation.toLowerCase() == file.subject.toLowerCase(),
+      (c) => c.abbreviation.toLowerCase() == file.course.toLowerCase(),
       orElse: () => Course.allCourses.first,
     );
   }

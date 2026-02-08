@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../models/pdf_file.dart';
 
 /// API Service to connect to server
@@ -250,6 +252,59 @@ class ApiService {
       }
     } catch (e) {
       return {'success': false, 'message': 'Server is starting up. Please wait and try again.'};
+    }
+  }
+
+  /// Upload a PDF file
+  static Future<Map<String, dynamic>> uploadFile({
+    required File file,
+    required String course,
+    required String subject,
+    String? customFileName,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/upload');
+      final request = http.MultipartRequest('POST', uri);
+
+      // Add the file
+      final fileName = file.path.split(Platform.pathSeparator).last;
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'file',
+          file.path,
+          filename: fileName,
+          contentType: MediaType('application', 'pdf'),
+        ),
+      );
+
+      // Add form fields
+      request.fields['course'] = course;
+      request.fields['subject'] = subject;
+      if (customFileName != null && customFileName.isNotEmpty) {
+        request.fields['customFileName'] = customFileName;
+      }
+
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 60),
+      );
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['error'] != null) {
+          return {'success': false, 'message': data['error']};
+        }
+        return {
+          'success': true,
+          'url': data['url'],
+          'fileName': data['fileName'],
+          'id': data['id'],
+        };
+      } else {
+        return {'success': false, 'message': 'Upload failed with status ${response.statusCode}'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Upload failed: ${e.toString()}'};
     }
   }
 }

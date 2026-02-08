@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdfx/pdfx.dart';
 import 'package:screen_protector/screen_protector.dart';
+import 'package:page_flip/page_flip.dart';
 import '../widgets/pdf_thumbnail.dart';
 
 /// Fullscreen PDF Viewer - just the PDF with zoom and scroll
@@ -18,31 +19,42 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   // Toggle screenshot protection: set to true to enable, false to disable
   static const bool enableScreenshotProtection = false;
 
-  // Two controllers for two viewing modes
-  PdfController? _pageController; // For single page (book) mode
+  // Controllers for viewing modes
   PdfControllerPinch? _scrollController; // For scroll mode
+  final GlobalKey<PageFlipWidgetState> _pageFlipController = GlobalKey(); // For page flip animation
 
   bool _singlePageMode = true; // Book mode is default
   int _currentPage = 1;
   int _totalPages = 0;
-  Future<PdfDocument>? _documentFuture;
+  int _pagesLoaded = 0; // Track loading progress
+  bool _pagesPreloaded = false; // All pages loaded for book mode
+  Future<PdfDocument>? _documentFuture; // For book mode page rendering
+  Future<PdfDocument>? _scrollDocumentFuture; // Separate future for scroll mode
+  PdfDocument? _loadedDocument;
+  final Map<int, PdfPageImage?> _pageCache = {};
+
+  // Zoom state for book mode (simple approach - just track which page is zoomed)
+  int? _zoomedPageNumber;
 
   @override
   void initState() {
     super.initState();
     _enableSecureMode();
     _documentFuture = _loadDocument();
+    _scrollDocumentFuture = _loadScrollDocument();
     _initControllers();
   }
 
   void _initControllers() {
-    _pageController = PdfController(
-      document: _documentFuture!,
-    );
     _scrollController = PdfControllerPinch(
-      document: _documentFuture!,
+      document: _scrollDocumentFuture!,
     );
     _scrollController!.addListener(_onScrollPageChanged);
+  }
+
+  Future<PdfDocument> _loadScrollDocument() async {
+    final bytes = await http.readBytes(Uri.parse(widget.pdfUrl));
+    return await PdfDocument.openData(bytes);
   }
 
   void _onScrollPageChanged() {
@@ -76,12 +88,94 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   Future<PdfDocument> _loadDocument() async {
     final bytes = await http.readBytes(Uri.parse(widget.pdfUrl));
     final doc = await PdfDocument.openData(bytes);
+    _loadedDocument = doc;
     if (mounted) {
       setState(() {
         _totalPages = doc.pagesCount;
       });
     }
+    // Pre-load all pages sequentially for book mode
+    _preloadAllPages();
     return doc;
+  }
+
+  Future<void> _preloadAllPages() async {
+    if (_loadedDocument == null || _totalPages == 0) return;
+    for (int i = 1; i <= _totalPages; i++) {
+      await _getPageImage(i); // Sequential loading
+      if (mounted) {
+        setState(() {
+          _pagesLoaded = i;
+        });
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _pagesPreloaded = true;
+      });
+    }
+  }
+
+  Future<PdfPageImage?> _getPageImage(int pageNumber) async {
+    if (_pageCache.containsKey(pageNumber)) {
+      return _pageCache[pageNumber];
+    }
+    if (_loadedDocument == null) return null;
+    try {
+      final page = await _loadedDocument!.getPage(pageNumber);
+      final image = await page.render(
+        width: page.width * 2,
+        height: page.height * 2,
+      );
+      await page.close(); // Release page resources
+      _pageCache[pageNumber] = image;
+      return image;
+    } catch (e) {
+      debugPrint('Error loading page $pageNumber: $e');
+      return null;
+    }
+  }
+
+  Widget _buildPageWidget(int pageNumber) {
+    final cachedImage = _pageCache[pageNumber];
+    if (cachedImage?.bytes == null) {
+      return Container(
+        color: Colors.white,
+        child: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    final isZoomed = _zoomedPageNumber == pageNumber;
+
+    return GestureDetector(
+      onDoubleTap: () {
+        setState(() {
+          if (isZoomed) {
+            _zoomedPageNumber = null; // Zoom out
+          } else {
+            _zoomedPageNumber = pageNumber; // Zoom in
+          }
+        });
+      },
+      child: Container(
+        color: Colors.white,
+        child: isZoomed
+            ? InteractiveViewer(
+                minScale: 1.0,
+                maxScale: 4.0,
+                child: Image.memory(
+                  cachedImage!.bytes,
+                  fit: BoxFit.contain,
+                ),
+              )
+            : Image.memory(
+                cachedImage!.bytes,
+                fit: BoxFit.contain,
+              ),
+      ),
+    );
   }
 
   void _toggleViewMode() {
@@ -94,14 +188,17 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   void dispose() {
     _disableSecureMode();
     _scrollController?.removeListener(_onScrollPageChanged);
-    _pageController?.dispose();
     _scrollController?.dispose();
+    _pageCache.clear();
     super.dispose();
   }
 
   void _goToPage(int page) {
     if (page >= 1 && page <= _totalPages) {
-      _pageController?.jumpToPage(page);
+      _pageFlipController.currentState?.goToPage(page - 1);
+      setState(() {
+        _currentPage = page;
+      });
     }
   }
 
@@ -116,14 +213,58 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
             Positioned.fill(
               bottom: _singlePageMode && _totalPages > 0 ? 100 : 0,
               child: _singlePageMode
-                  ? PdfView(
-                      controller: _pageController!,
-                      scrollDirection: Axis.horizontal,
-                      pageSnapping: true,
-                      onPageChanged: _onPageChanged,
-                    )
-                  : PdfViewPinch(
-                      controller: _scrollController!,
+                  ? _pagesPreloaded
+                      ? PageFlipWidget(
+                          key: _pageFlipController,
+                          backgroundColor: Colors.black,
+                          lastPage: Container(
+                            color: Colors.white,
+                            child: const Center(
+                              child: Text(
+                                'End of Document',
+                                style: TextStyle(fontSize: 18, color: Colors.grey),
+                              ),
+                            ),
+                          ),
+                          children: List.generate(_totalPages, (index) {
+                            return _buildPageWidget(index + 1);
+                          }),
+                        )
+                      : Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const CircularProgressIndicator(color: Colors.white),
+                              const SizedBox(height: 16),
+                              Text(
+                                _totalPages > 0
+                                    ? 'Loading pages: $_pagesLoaded / $_totalPages'
+                                    : 'Loading document...',
+                                style: const TextStyle(color: Colors.white70),
+                              ),
+                            ],
+                          ),
+                        )
+                  : FutureBuilder<PdfDocument>(
+                      future: _scrollDocumentFuture,
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Text(
+                              'Error loading PDF: ${snapshot.error}',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          );
+                        }
+                        if (!snapshot.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(color: Colors.white),
+                          );
+                        }
+                        return PdfViewPinch(
+                          controller: _scrollController!,
+                        );
+                      },
                     ),
             ),
             // Toggle button - top right

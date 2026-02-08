@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import 'course_subjects_screen.dart';
 import 'bookmarks_screen.dart';
 import 'splash_screen.dart';
+import 'upload_notes_screen.dart';
 
 /// Home Screen with course exploration
 class HomeScreen extends ConsumerStatefulWidget {
@@ -356,6 +357,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                       Navigator.push(
                         context,
                         MaterialPageRoute(builder: (context) => const BookmarksScreen()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _buildStyledMenuItem(
+                    icon: Icons.upload_file_rounded,
+                    label: 'Upload Notes',
+                    iconColor: const Color(0xFF4CAF50),
+                    bgColor: const Color(0xFF4CAF50).withOpacity(0.1),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const UploadNotesScreen()),
                       );
                     },
                   ),

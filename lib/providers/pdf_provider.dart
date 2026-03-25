@@ -53,3 +53,69 @@ final pdfFilesByCourseSubjectProvider = FutureProvider.family<List<PdfFile>, Cou
     throw Exception(result['message'] ?? 'Failed to fetch files');
   }
 });
+
+/// Provider for fetching placement subjects by course
+final placementSubjectsProvider = FutureProvider.family<List<String>, String>((ref, course) async {
+  final result = await ApiService.getPlacementSubjectsByCourse(course);
+
+  if (result['success'] == true) {
+    return result['subjects'] as List<String>;
+  } else {
+    throw Exception(result['message'] ?? 'Failed to fetch placement subjects');
+  }
+});
+
+/// Provider for fetching placement files by course and subject
+final placementFilesByCourseSubjectProvider = FutureProvider.family<List<PdfFile>, CourseSubjectParams>((ref, params) async {
+  final result = await ApiService.getPlacementFilesByCourseAndSubject(params.course, params.subject);
+
+  if (result['success'] == true) {
+    return result['files'] as List<PdfFile>;
+  } else {
+    throw Exception(result['message'] ?? 'Failed to fetch placement files');
+  }
+});
+
+/// Provider for fetching placement files by course (legacy)
+final placementFilesProvider = FutureProvider.family<List<PdfFile>, String>((ref, subject) async {
+  final result = await ApiService.getPlacementFilesBySubject(subject);
+
+  if (result['success'] == true) {
+    return result['files'] as List<PdfFile>;
+  } else {
+    throw Exception(result['message'] ?? 'Failed to fetch placement files');
+  }
+});
+
+/// Provider for fetching PYQ subjects by course
+final pyqSubjectsProvider = FutureProvider.family<List<String>, String>((ref, course) async {
+  final result = await ApiService.getPyqSubjectsByCourse(course);
+
+  if (result['success'] == true) {
+    return result['subjects'] as List<String>;
+  } else {
+    throw Exception(result['message'] ?? 'Failed to fetch PYQ subjects');
+  }
+});
+
+/// Provider for fetching PYQ files by course and subject
+final pyqFilesByCourseSubjectProvider = FutureProvider.family<List<PdfFile>, CourseSubjectParams>((ref, params) async {
+  final result = await ApiService.getPyqFilesByCourseAndSubject(params.course, params.subject);
+
+  if (result['success'] == true) {
+    return result['files'] as List<PdfFile>;
+  } else {
+    throw Exception(result['message'] ?? 'Failed to fetch PYQ files');
+  }
+});
+
+/// Provider for fetching PYQ files by course (legacy)
+final pyqFilesProvider = FutureProvider.family<List<PdfFile>, String>((ref, subject) async {
+  final result = await ApiService.getPyqFilesBySubject(subject);
+
+  if (result['success'] == true) {
+    return result['files'] as List<PdfFile>;
+  } else {
+    throw Exception(result['message'] ?? 'Failed to fetch PYQ files');
+  }
+});

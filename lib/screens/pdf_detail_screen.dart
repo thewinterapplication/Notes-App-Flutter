@@ -170,6 +170,20 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                                       maxLines: 3,
                                       overflow: TextOverflow.ellipsis,
                                     ),
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      children: [
+                                        Icon(Icons.person_outline, size: 16, color: Colors.white.withOpacity(0.7)),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Author',
+                                          style: TextStyle(
+                                            color: Colors.white.withOpacity(0.7),
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ],
                                 ),
                               ),
@@ -186,49 +200,99 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                                       width: 140,
                                       height: 180,
                                       decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          begin: Alignment.topCenter,
-                                          end: Alignment.bottomCenter,
-                                          colors: [
-                                            course.gradientColors[0],
-                                            course.gradientColors[1],
-                                          ],
-                                        ),
-                                        borderRadius: BorderRadius.circular(8),
+                                        color: const Color(0xFFF5F0E8),
+                                        borderRadius: BorderRadius.circular(6),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.25),
+                                            blurRadius: 10,
+                                            offset: const Offset(3, 4),
+                                          ),
+                                        ],
                                       ),
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                      child: Stack(
                                         children: [
-                                          Container(
-                                            width: 50,
-                                            height: 50,
-                                            decoration: BoxDecoration(
-                                              color: Colors.white.withOpacity(0.3),
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: const Icon(
-                                              Icons.play_arrow,
-                                              color: Colors.white,
-                                              size: 30,
+                                          // Book spine shadow
+                                          Positioned(
+                                            left: 0,
+                                            top: 0,
+                                            bottom: 0,
+                                            child: Container(
+                                              width: 12,
+                                              decoration: BoxDecoration(
+                                                gradient: LinearGradient(
+                                                  colors: [
+                                                    Colors.black.withOpacity(0.08),
+                                                    Colors.transparent,
+                                                  ],
+                                                ),
+                                                borderRadius: const BorderRadius.only(
+                                                  topLeft: Radius.circular(6),
+                                                  bottomLeft: Radius.circular(6),
+                                                ),
+                                              ),
                                             ),
                                           ),
-                                          const SizedBox(height: 12),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 6,
+                                          // Page lines
+                                          Positioned(
+                                            left: 20,
+                                            right: 20,
+                                            top: 30,
+                                            child: Column(
+                                              children: List.generate(5, (i) => Padding(
+                                                padding: const EdgeInsets.only(bottom: 6),
+                                                child: Container(
+                                                  height: 2,
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.grey.withOpacity(0.15),
+                                                    borderRadius: BorderRadius.circular(1),
+                                                  ),
+                                                ),
+                                              )),
                                             ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.white.withOpacity(0.2),
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                            child: const Text(
-                                              'click here to\nread',
-                                              textAlign: TextAlign.center,
-                                              style: TextStyle(
+                                          ),
+                                          // Center book icon
+                                          Center(
+                                            child: Container(
+                                              width: 64,
+                                              height: 64,
+                                              decoration: BoxDecoration(
+                                                gradient: LinearGradient(
+                                                  begin: Alignment.topLeft,
+                                                  end: Alignment.bottomRight,
+                                                  colors: course.gradientColors,
+                                                ),
+                                                borderRadius: BorderRadius.circular(14),
+                                              ),
+                                              child: const Icon(
+                                                Icons.auto_stories_rounded,
                                                 color: Colors.white,
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w500,
+                                                size: 32,
+                                              ),
+                                            ),
+                                          ),
+                                          // Open button at bottom
+                                          Positioned(
+                                            left: 20,
+                                            right: 20,
+                                            bottom: 16,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(vertical: 7),
+                                              decoration: BoxDecoration(
+                                                gradient: LinearGradient(
+                                                  colors: course.gradientColors,
+                                                ),
+                                                borderRadius: BorderRadius.circular(20),
+                                              ),
+                                              child: const Center(
+                                                child: Text(
+                                                  'Open',
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -325,7 +389,7 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                 children: [
                   _buildStatItem(Icons.visibility_outlined, '${pdfFile.viewCount}', 'Views'),
                   _buildStatItem(Icons.description_outlined, '-', 'Pages'),
-                  _buildStatItem(Icons.favorite_outline, '${pdfFile.likesCount}', 'Likes'),
+                  _buildSaveButton(authState),
                 ],
               ),
             ),
@@ -425,6 +489,37 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSaveButton(AuthState authState) {
+    final isSaved = authState.isFavourite(pdfFile.id);
+    return GestureDetector(
+      onTap: () {
+        if (authState.isLoggedIn) {
+          ref.read(authProvider.notifier).toggleFavourite(pdfFile.id);
+        } else {
+          _showLoginDialog();
+        }
+      },
+      child: Column(
+        children: [
+          Icon(
+            isSaved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
+            size: 24,
+            color: isSaved ? course.gradientColors[0] : Colors.grey.shade700,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            isSaved ? 'Saved' : 'Save',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isSaved ? FontWeight.w600 : FontWeight.w400,
+              color: isSaved ? course.gradientColors[0] : Colors.grey.shade600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -209,6 +209,128 @@ class ApiService {
     }
   }
 
+  /// Fetch placement subjects for a course
+  static Future<Map<String, dynamic>> getPlacementSubjectsByCourse(String course) async {
+    try {
+      final response = await _getWithRetry(
+        '$baseUrl/api/placements/courses/${Uri.encodeComponent(course)}/subjects',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final subjects = List<String>.from(data['subjects'] ?? []);
+        return {'success': true, 'subjects': subjects};
+      } else {
+        return {'success': false, 'message': 'Failed to fetch placement subjects'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Server is starting up. Please wait and try again.'};
+    }
+  }
+
+  /// Fetch placement files by course and subject
+  static Future<Map<String, dynamic>> getPlacementFilesByCourseAndSubject(String course, String subject) async {
+    try {
+      final response = await _getWithRetry(
+        '$baseUrl/api/placements/courses/${Uri.encodeComponent(course)}/subjects/${Uri.encodeComponent(subject)}/files',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final files = (data['files'] as List)
+            .map((json) => PdfFile.fromJson(json))
+            .toList();
+        return {'success': true, 'files': files};
+      } else {
+        return {'success': false, 'message': 'Failed to fetch placement files'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Server is starting up. Please wait and try again.'};
+    }
+  }
+
+  /// Fetch placement files by subject (legacy)
+  static Future<Map<String, dynamic>> getPlacementFilesBySubject(String subject) async {
+    try {
+      final response = await _getWithRetry(
+        '$baseUrl/api/placements/files/subject/${Uri.encodeComponent(subject)}',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final files = (data['files'] as List)
+            .map((json) => PdfFile.fromJson(json))
+            .toList();
+        return {'success': true, 'files': files};
+      } else {
+        return {'success': false, 'message': 'Failed to fetch placement files'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Server is starting up. Please wait and try again.'};
+    }
+  }
+
+  /// Fetch PYQ subjects for a course
+  static Future<Map<String, dynamic>> getPyqSubjectsByCourse(String course) async {
+    try {
+      final response = await _getWithRetry(
+        '$baseUrl/api/pyq/courses/${Uri.encodeComponent(course)}/subjects',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final subjects = List<String>.from(data['subjects'] ?? []);
+        return {'success': true, 'subjects': subjects};
+      } else {
+        return {'success': false, 'message': 'Failed to fetch PYQ subjects'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Server is starting up. Please wait and try again.'};
+    }
+  }
+
+  /// Fetch PYQ files by course and subject
+  static Future<Map<String, dynamic>> getPyqFilesByCourseAndSubject(String course, String subject) async {
+    try {
+      final response = await _getWithRetry(
+        '$baseUrl/api/pyq/courses/${Uri.encodeComponent(course)}/subjects/${Uri.encodeComponent(subject)}/files',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final files = (data['files'] as List)
+            .map((json) => PdfFile.fromJson(json))
+            .toList();
+        return {'success': true, 'files': files};
+      } else {
+        return {'success': false, 'message': 'Failed to fetch PYQ files'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Server is starting up. Please wait and try again.'};
+    }
+  }
+
+  /// Fetch PYQ files by subject (legacy)
+  static Future<Map<String, dynamic>> getPyqFilesBySubject(String subject) async {
+    try {
+      final response = await _getWithRetry(
+        '$baseUrl/api/pyq/files/subject/${Uri.encodeComponent(subject)}',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final files = (data['files'] as List)
+            .map((json) => PdfFile.fromJson(json))
+            .toList();
+        return {'success': true, 'files': files};
+      } else {
+        return {'success': false, 'message': 'Failed to fetch PYQ files'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Server is starting up. Please wait and try again.'};
+    }
+  }
+
   /// Get user profile (includes favourites)
   static Future<Map<String, dynamic>> getUserProfile(String phone) async {
     try {

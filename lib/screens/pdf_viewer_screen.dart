@@ -1,11 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdfx/pdfx.dart';
 import 'package:screen_protector/screen_protector.dart';
-import 'package:page_flip/page_flip.dart';
-import '../widgets/pdf_thumbnail.dart';
 
-/// Fullscreen PDF Viewer - just the PDF with zoom and scroll
+/// Fullscreen PDF Viewer - simple page view with zoom and thumbnail navigation
 class PdfViewerScreen extends StatefulWidget {
   final String pdfUrl;
 
@@ -16,61 +15,39 @@ class PdfViewerScreen extends StatefulWidget {
 }
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
-  // Toggle screenshot protection: set to true to enable, false to disable
-  static const bool enableScreenshotProtection = false;
+  static const bool enableScreenshotProtection = true;
 
-  // Controllers for viewing modes
-  PdfControllerPinch? _scrollController; // For scroll mode
-  final GlobalKey<PageFlipWidgetState> _pageFlipController = GlobalKey(); // For page flip animation
-
-  bool _singlePageMode = true; // Book mode is default
   int _currentPage = 1;
   int _totalPages = 0;
-  int _pagesLoaded = 0; // Track loading progress
-  bool _pagesPreloaded = false; // All pages loaded for book mode
-  Future<PdfDocument>? _documentFuture; // For book mode page rendering
-  Future<PdfDocument>? _scrollDocumentFuture; // Separate future for scroll mode
+  bool _documentReady = false;
+  bool _scrollMode = false; // false = page mode, true = scroll mode
   PdfDocument? _loadedDocument;
   final Map<int, PdfPageImage?> _pageCache = {};
 
-  // Zoom state for book mode (simple approach - just track which page is zoomed)
-  int? _zoomedPageNumber;
+  // Async lock to serialize getPage() calls — prevents concurrent native access
+  Completer<void>? _renderLock;
+
+  // Track zoom/pinch state to disable PageView swiping
+  bool _isZoomedIn = false;
+  int _pointerCount = 0;
+  final TransformationController _transformationController = TransformationController();
+
+  late final PageController _pageController;
+  final ScrollController _thumbnailScrollController = ScrollController();
+
+  // Scroll mode controller (separate document instance to avoid concurrency)
+  PdfControllerPinch? _scrollController;
+  Future<PdfDocument>? _scrollDocumentFuture;
 
   @override
   void initState() {
     super.initState();
     _enableSecureMode();
-    _documentFuture = _loadDocument();
+    _pageController = PageController();
+    _transformationController.addListener(_onZoomChanged);
+    _loadDocument();
     _scrollDocumentFuture = _loadScrollDocument();
-    _initControllers();
-  }
-
-  void _initControllers() {
-    _scrollController = PdfControllerPinch(
-      document: _scrollDocumentFuture!,
-    );
-    _scrollController!.addListener(_onScrollPageChanged);
-  }
-
-  Future<PdfDocument> _loadScrollDocument() async {
-    final bytes = await http.readBytes(Uri.parse(widget.pdfUrl));
-    return await PdfDocument.openData(bytes);
-  }
-
-  void _onScrollPageChanged() {
-    if (mounted && !_singlePageMode) {
-      setState(() {
-        _currentPage = _scrollController!.page;
-      });
-    }
-  }
-
-  void _onPageChanged(int page) {
-    if (mounted) {
-      setState(() {
-        _currentPage = page;
-      });
-    }
+    _scrollController = PdfControllerPinch(document: _scrollDocumentFuture!);
   }
 
   Future<void> _enableSecureMode() async {
@@ -85,229 +62,323 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     }
   }
 
-  Future<PdfDocument> _loadDocument() async {
-    final bytes = await http.readBytes(Uri.parse(widget.pdfUrl));
-    final doc = await PdfDocument.openData(bytes);
-    _loadedDocument = doc;
-    if (mounted) {
+  void _onZoomChanged() {
+    final scale = _transformationController.value.getMaxScaleOnAxis();
+    final zoomed = scale > 1.05;
+    if (zoomed != _isZoomedIn) {
       setState(() {
-        _totalPages = doc.pagesCount;
+        _isZoomedIn = zoomed;
       });
     }
-    // Pre-load all pages sequentially for book mode
-    _preloadAllPages();
-    return doc;
   }
 
-  Future<void> _preloadAllPages() async {
-    if (_loadedDocument == null || _totalPages == 0) return;
-    for (int i = 1; i <= _totalPages; i++) {
-      await _getPageImage(i); // Sequential loading
+  Future<PdfDocument> _loadScrollDocument() async {
+    final bytes = await http.readBytes(Uri.parse(widget.pdfUrl));
+    return await PdfDocument.openData(bytes);
+  }
+
+  Future<void> _loadDocument() async {
+    try {
+      final bytes = await http.readBytes(Uri.parse(widget.pdfUrl));
+      final doc = await PdfDocument.openData(bytes);
+      _loadedDocument = doc;
       if (mounted) {
         setState(() {
-          _pagesLoaded = i;
+          _totalPages = doc.pagesCount;
+          _documentReady = true;
         });
+        // Preload first page and adjacent
+        _preloadAdjacentPages(1);
       }
-    }
-    if (mounted) {
-      setState(() {
-        _pagesPreloaded = true;
-      });
+    } catch (e) {
+      debugPrint('Error loading document: $e');
     }
   }
 
-  Future<PdfPageImage?> _getPageImage(int pageNumber) async {
+  /// Serialized page rendering — only one getPage() call at a time
+  Future<PdfPageImage?> _ensurePageLoaded(int pageNumber) async {
     if (_pageCache.containsKey(pageNumber)) {
       return _pageCache[pageNumber];
     }
     if (_loadedDocument == null) return null;
+
+    // Wait for any ongoing render to finish
+    while (_renderLock != null) {
+      await _renderLock!.future;
+    }
+
+    // Double-check cache after waiting
+    if (_pageCache.containsKey(pageNumber)) {
+      return _pageCache[pageNumber];
+    }
+
+    // Acquire lock
+    _renderLock = Completer<void>();
     try {
       final page = await _loadedDocument!.getPage(pageNumber);
       final image = await page.render(
         width: page.width * 2,
         height: page.height * 2,
       );
-      await page.close(); // Release page resources
+      await page.close();
       _pageCache[pageNumber] = image;
+      if (mounted) setState(() {});
       return image;
     } catch (e) {
       debugPrint('Error loading page $pageNumber: $e');
       return null;
+    } finally {
+      // Release lock
+      final lock = _renderLock;
+      _renderLock = null;
+      lock?.complete();
     }
   }
 
-  Widget _buildPageWidget(int pageNumber) {
-    final cachedImage = _pageCache[pageNumber];
-    if (cachedImage?.bytes == null) {
-      return Container(
-        color: Colors.white,
-        child: const Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
+  void _preloadAdjacentPages(int currentPage) {
+    // Load current page first, then adjacent pages sequentially
+    _ensurePageLoaded(currentPage).then((_) {
+      for (int i = 1; i <= 2; i++) {
+        if (currentPage + i <= _totalPages) {
+          _ensurePageLoaded(currentPage + i);
+        }
+        if (currentPage - i >= 1) {
+          _ensurePageLoaded(currentPage - i);
+        }
+      }
+    });
+  }
 
-    final isZoomed = _zoomedPageNumber == pageNumber;
-
-    return GestureDetector(
-      onDoubleTap: () {
-        setState(() {
-          if (isZoomed) {
-            _zoomedPageNumber = null; // Zoom out
-          } else {
-            _zoomedPageNumber = pageNumber; // Zoom in
-          }
-        });
-      },
+  Widget _buildZoomableImage(PdfPageImage image) {
+    return InteractiveViewer(
+      transformationController: _transformationController,
+      minScale: 1.0,
+      maxScale: 5.0,
+      panEnabled: _isZoomedIn,
       child: Container(
         color: Colors.white,
-        child: isZoomed
-            ? InteractiveViewer(
-                minScale: 1.0,
-                maxScale: 4.0,
-                child: Image.memory(
-                  cachedImage!.bytes,
-                  fit: BoxFit.contain,
-                ),
-              )
-            : Image.memory(
-                cachedImage!.bytes,
-                fit: BoxFit.contain,
-              ),
+        alignment: Alignment.center,
+        child: Image.memory(
+          image.bytes,
+          fit: BoxFit.contain,
+        ),
       ),
     );
   }
 
-  void _toggleViewMode() {
-    setState(() {
-      _singlePageMode = !_singlePageMode;
-    });
+  Widget _buildPageWidget(int pageNumber) {
+    final cachedImage = _pageCache[pageNumber];
+    if (cachedImage?.bytes != null) {
+      return _buildZoomableImage(cachedImage!);
+    }
+
+    // Page not cached yet — load it
+    return FutureBuilder<PdfPageImage?>(
+      future: _ensurePageLoaded(pageNumber),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done &&
+            snapshot.data?.bytes != null) {
+          return _buildZoomableImage(snapshot.data!);
+        }
+        return Container(
+          color: Colors.white,
+          child: const Center(
+            child: CircularProgressIndicator(),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Build thumbnail using cached page image — no independent getPage() calls
+  Widget _buildThumbnail(int pageNum, bool isSelected) {
+    final cachedImage = _pageCache[pageNum];
+    return GestureDetector(
+      onTap: () => _goToPage(pageNum),
+      child: Container(
+        width: 60,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: isSelected ? Colors.blue : Colors.grey[300]!,
+            width: isSelected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(4),
+          color: Colors.white,
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Show cached image or page number placeholder
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: cachedImage?.bytes != null
+                  ? Image.memory(
+                      cachedImage!.bytes,
+                      fit: BoxFit.cover,
+                    )
+                  : Center(
+                      child: Text(
+                        '$pageNum',
+                        style: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+            ),
+            // Page number overlay
+            Positioned(
+              bottom: 2,
+              right: 2,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: 1,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Colors.blue
+                      : Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                child: Text(
+                  '$pageNum',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _goToPage(int page) {
+    if (page >= 1 && page <= _totalPages) {
+      _pageController.animateToPage(
+        page - 1,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  void _scrollThumbnailToPage(int page) {
+    if (!_thumbnailScrollController.hasClients) return;
+    final targetOffset = (page - 1) * 68.0;
+    final maxScroll = _thumbnailScrollController.position.maxScrollExtent;
+    final viewportWidth = _thumbnailScrollController.position.viewportDimension;
+    final centeredOffset = targetOffset - (viewportWidth / 2) + 34;
+    _thumbnailScrollController.animateTo(
+      centeredOffset.clamp(0.0, maxScroll),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
   }
 
   @override
   void dispose() {
     _disableSecureMode();
-    _scrollController?.removeListener(_onScrollPageChanged);
+    _transformationController.removeListener(_onZoomChanged);
+    _transformationController.dispose();
+    _pageController.dispose();
     _scrollController?.dispose();
+    _thumbnailScrollController.dispose();
     _pageCache.clear();
     super.dispose();
-  }
-
-  void _goToPage(int page) {
-    if (page >= 1 && page <= _totalPages) {
-      _pageFlipController.currentState?.goToPage(page - 1);
-      setState(() {
-        _currentPage = page;
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Stack(
           children: [
-            // Main PDF viewer with padding for thumbnail strip
+            // Main PDF view — page mode or scroll mode
             Positioned.fill(
-              bottom: _singlePageMode && _totalPages > 0 ? 100 : 0,
-              child: _singlePageMode
-                  ? _pagesPreloaded
-                      ? PageFlipWidget(
-                          key: _pageFlipController,
-                          backgroundColor: Colors.black,
-                          lastPage: Container(
-                            color: Colors.white,
-                            child: const Center(
-                              child: Text(
-                                'End of Document',
-                                style: TextStyle(fontSize: 18, color: Colors.grey),
-                              ),
-                            ),
-                          ),
-                          children: List.generate(_totalPages, (index) {
-                            return _buildPageWidget(index + 1);
-                          }),
-                        )
-                      : Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const CircularProgressIndicator(color: Colors.white),
-                              const SizedBox(height: 16),
-                              Text(
-                                _totalPages > 0
-                                    ? 'Loading pages: $_pagesLoaded / $_totalPages'
-                                    : 'Loading document...',
-                                style: const TextStyle(color: Colors.white70),
-                              ),
-                            ],
-                          ),
-                        )
-                  : FutureBuilder<PdfDocument>(
+              bottom: !_scrollMode && _documentReady && _totalPages > 0 ? 100 : 0,
+              child: _scrollMode
+                  ? FutureBuilder<PdfDocument>(
                       future: _scrollDocumentFuture,
                       builder: (context, snapshot) {
                         if (snapshot.hasError) {
                           return Center(
                             child: Text(
                               'Error loading PDF: ${snapshot.error}',
-                              style: const TextStyle(color: Colors.white),
+                              style: const TextStyle(color: Colors.black54),
                             ),
                           );
                         }
                         if (!snapshot.hasData) {
                           return const Center(
-                            child: CircularProgressIndicator(color: Colors.white),
+                            child: CircularProgressIndicator(),
                           );
                         }
                         return PdfViewPinch(
                           controller: _scrollController!,
                         );
                       },
-                    ),
-            ),
-            // Toggle button - top right
-            Positioned(
-              right: 16,
-              top: 16,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(25),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    GestureDetector(
-                      onTap: _toggleViewMode,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _singlePageMode ? Icons.menu_book : Icons.view_day,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _singlePageMode ? 'Book' : 'Scroll',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
+                    )
+                  : _documentReady
+                      ? Listener(
+                          onPointerDown: (_) {
+                            _pointerCount++;
+                            if (_pointerCount >= 2) {
+                              setState(() {});
+                            }
+                          },
+                          onPointerUp: (_) {
+                            _pointerCount--;
+                            if (_pointerCount < 2) {
+                              setState(() {});
+                            }
+                          },
+                          onPointerCancel: (_) {
+                            _pointerCount--;
+                            if (_pointerCount < 2) {
+                              setState(() {});
+                            }
+                          },
+                          child: PageView.builder(
+                            controller: _pageController,
+                            itemCount: _totalPages,
+                            physics: (_isZoomedIn || _pointerCount >= 2)
+                                ? const NeverScrollableScrollPhysics()
+                                : null,
+                            onPageChanged: (index) {
+                              // Reset zoom when changing pages
+                              _transformationController.value = Matrix4.identity();
+                              setState(() {
+                                _currentPage = index + 1;
+                              });
+                              _preloadAdjacentPages(index + 1);
+                              _scrollThumbnailToPage(index + 1);
+                            },
+                            itemBuilder: (context, index) {
+                              return _buildPageWidget(index + 1);
+                            },
+                          ),
+                        )
+                      : const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 16),
+                              Text(
+                                'Loading document...',
+                                style: TextStyle(color: Colors.black54),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ),
             // Page indicator - top left
             if (_totalPages > 0)
@@ -315,7 +386,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                 left: 16,
                 top: 16,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: Colors.black.withOpacity(0.6),
                     borderRadius: BorderRadius.circular(20),
@@ -330,87 +402,70 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                   ),
                 ),
               ),
-            // Thumbnail strip - bottom (only in book mode)
-            if (_singlePageMode && _totalPages > 0)
+            // Toggle button - top right
+            if (_documentReady)
+              Positioned(
+                right: 16,
+                top: 16,
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _scrollMode = !_scrollMode;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _scrollMode ? Icons.auto_stories : Icons.view_day,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _scrollMode ? 'Page' : 'Scroll',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            // Thumbnail strip - bottom (only in page mode)
+            if (!_scrollMode && _documentReady && _totalPages > 0)
               Positioned(
                 left: 0,
                 right: 0,
                 bottom: 0,
                 height: 100,
                 child: Container(
-                  color: Colors.black.withOpacity(0.9),
-                  child: FutureBuilder<PdfDocument>(
-                    future: _documentFuture,
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const Center(
-                          child: CircularProgressIndicator(
-                            color: Colors.white54,
-                            strokeWidth: 2,
-                          ),
-                        );
-                      }
-                      return ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                        itemCount: _totalPages,
-                        itemBuilder: (context, index) {
-                          final pageNum = index + 1;
-                          final isSelected = pageNum == _currentPage;
-                          return GestureDetector(
-                            onTap: () => _goToPage(pageNum),
-                            child: Container(
-                              width: 60,
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: isSelected ? Colors.blue : Colors.white24,
-                                  width: isSelected ? 2 : 1,
-                                ),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(3),
-                                    child: PdfThumbnail(
-                                      document: snapshot.data!,
-                                      pageNumber: pageNum,
-                                      backgroundColor: Colors.white,
-                                    ),
-                                  ),
-                                  // Page number overlay
-                                  Positioned(
-                                    bottom: 2,
-                                    right: 2,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 4,
-                                        vertical: 1,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? Colors.blue
-                                            : Colors.black.withOpacity(0.7),
-                                        borderRadius: BorderRadius.circular(2),
-                                      ),
-                                      child: Text(
-                                        '$pageNum',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      );
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border(
+                      top: BorderSide(color: Colors.grey[300]!, width: 1),
+                    ),
+                  ),
+                  child: ListView.builder(
+                    controller: _thumbnailScrollController,
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 8),
+                    itemCount: _totalPages,
+                    itemBuilder: (context, index) {
+                      final pageNum = index + 1;
+                      final isSelected = pageNum == _currentPage;
+                      return _buildThumbnail(pageNum, isSelected);
                     },
                   ),
                 ),

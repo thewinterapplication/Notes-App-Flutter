@@ -4,10 +4,8 @@
     <!-- Storage permissions for file picker -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
-    <!-- For Android 13+ media access -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
+    <!-- For Android 13+ document access -->
+    <uses-permission android:name="android.permission.READ_MEDIA_DOCUMENTS"/>
 
     <application
         android:label="College Notes"

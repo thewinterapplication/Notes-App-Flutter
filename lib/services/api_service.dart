@@ -8,6 +8,8 @@ import '../models/pdf_file.dart';
 class ApiService {
   // Single source of truth - use machine IP for all platforms
   static const String baseUrl = 'https://notes-app-server-wczw.onrender.com';
+  // static const String baseUrl = 'http://192.168.1.18:3000';
+
 
   // Retry configuration for Render.com free tier (server may be sleeping)
   static const int maxRetries = 3;
@@ -109,6 +111,11 @@ class ApiService {
 
   /// Send OTP to phone number
   static Future<Map<String, dynamic>> sendOTP(String phone) async {
+    // Static test number bypass - skip OTP entirely
+    if (phone == '9999999999') {
+      return {'success': true, 'sessionId': 'test-session-9999999999'};
+    }
+
     try {
       // Add country code for India if not present
       final phoneWithCode = phone.startsWith('91') ? phone : '91$phone';
@@ -131,6 +138,14 @@ class ApiService {
 
   /// Verify OTP
   static Future<Map<String, dynamic>> verifyOTP(String sessionId, String otp) async {
+    // Static test number bypass - accept OTP 5432
+    if (sessionId == 'test-session-9999999999') {
+      if (otp == '5432') {
+        return {'success': true, 'message': 'OTP verified successfully'};
+      }
+      return {'success': false, 'message': 'Invalid OTP'};
+    }
+
     try {
       final response = await _postWithRetry(
         '$baseUrl/otp/verify',

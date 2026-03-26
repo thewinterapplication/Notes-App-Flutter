@@ -168,6 +168,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                     child: TextFormField(
                                       controller: _phoneController,
                                       keyboardType: TextInputType.phone,
+                                      maxLength: 10,
                                       style: const TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w500,
@@ -177,14 +178,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                         hintText: 'Enter mobile number',
                                         hintStyle: TextStyle(color: Color(0xFF999999)),
                                         border: InputBorder.none,
+                                        counterText: '',
                                         contentPadding: EdgeInsets.symmetric(horizontal: 16),
                                       ),
                                       validator: (value) {
                                         if (value == null || value.isEmpty) {
                                           return 'Please enter mobile number';
                                         }
-                                        if (value.length < 10) {
-                                          return 'Enter valid mobile number';
+                                        if (value.length != 10) {
+                                          return 'Enter valid 10-digit mobile number';
                                         }
                                         return null;
                                       },

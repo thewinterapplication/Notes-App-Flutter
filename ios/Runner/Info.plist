@@ -47,6 +47,12 @@
 		<true/>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<key>LSApplicationQueriesSchemes</key>
+		<array>
+			<string>tez</string>
+			<string>phonepe</string>
+			<string>paytmmp</string>
+		</array>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>This app needs access to your photo library to select files for upload.</string>
 	</dict>

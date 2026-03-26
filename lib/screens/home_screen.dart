@@ -5,10 +5,12 @@ import '../models/course.dart';
 import '../models/placement_category.dart';
 import '../constants/app_constants.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/subscription_banner.dart';
 import 'course_subjects_screen.dart';
 import 'bookmarks_screen.dart';
 import 'placement_category_files_screen.dart';
 import 'splash_screen.dart';
+import 'subscription_screen.dart';
 import 'upload_notes_screen.dart';
 
 /// Home Screen with new wireframe-based design
@@ -21,7 +23,8 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final TextEditingController _coursesSearchController = TextEditingController();
+  final TextEditingController _coursesSearchController =
+      TextEditingController();
   int _currentNavIndex = 0;
   String _coursesSearchQuery = '';
 
@@ -59,10 +62,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  void _openSubscriptionScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SubscriptionScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    final userName = authState.userName.isNotEmpty ? authState.userName : 'Guest';
+    final userName = authState.userName.isNotEmpty
+        ? authState.userName
+        : 'Guest';
 
     return Scaffold(
       key: _scaffoldKey,
@@ -72,10 +84,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: _currentNavIndex == 0
             ? _buildHomeBody(context, userName)
             : _currentNavIndex == 1
-                ? _buildCoursesTab()
-                : _currentNavIndex == 2
-                    ? _buildPlacementsTab()
-                    : const BookmarksScreen(),
+            ? _buildCoursesTab()
+            : _currentNavIndex == 2
+            ? _buildPlacementsTab()
+            : const BookmarksScreen(),
       ),
       bottomNavigationBar: _buildBottomNavBar(),
     );
@@ -107,7 +119,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                       ],
                     ),
-                    child: const Icon(Icons.menu, color: Color(0xFF2D3E50), size: 24),
+                    child: const Icon(
+                      Icons.menu,
+                      color: Color(0xFF2D3E50),
+                      size: 24,
+                    ),
                   ),
                 ),
                 GestureDetector(
@@ -125,7 +141,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                       ],
                     ),
-                    child: const Icon(Icons.notifications_outlined, color: Color(0xFF2D3E50), size: 24),
+                    child: const Icon(
+                      Icons.notifications_outlined,
+                      color: Color(0xFF2D3E50),
+                      size: 24,
+                    ),
                   ),
                 ),
               ],
@@ -177,12 +197,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
 
+          const SizedBox(height: 18),
+
+          SubscriptionBanner(
+            subscription: ref.watch(authProvider).subscription,
+            onTap: _openSubscriptionScreen,
+          ),
+
           const SizedBox(height: 24),
 
           // Notes Section
-          _buildSectionHeader('Notes', onSeeAll: () {
-            // Could navigate to a full list
-          }),
+          _buildSectionHeader(
+            'Notes',
+            onSeeAll: () {
+              // Could navigate to a full list
+            },
+          ),
           const SizedBox(height: 12),
           SizedBox(
             height: 160,
@@ -202,9 +232,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           const SizedBox(height: 24),
 
           // Placements Section
-          _buildSectionHeader('Placements', onSeeAll: () {
-            setState(() => _currentNavIndex = 2);
-          }),
+          _buildSectionHeader(
+            'Placements',
+            onSeeAll: () {
+              setState(() => _currentNavIndex = 2);
+            },
+          ),
           const SizedBox(height: 12),
           SizedBox(
             height: 160,
@@ -266,7 +299,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => CourseSubjectsScreen(course: course, isPYQ: isPYQ),
+            builder: (context) =>
+                CourseSubjectsScreen(course: course, isPYQ: isPYQ),
           ),
         );
       },
@@ -395,11 +429,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(
-                      category.icon,
-                      color: Colors.white,
-                      size: 24,
-                    ),
+                    child: Icon(category.icon, color: Colors.white, size: 24),
                   ),
                   const Spacer(),
                   Text(
@@ -438,10 +468,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            final filtered = courses.where((c) =>
-                c.fullName.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                c.abbreviation.toLowerCase().contains(searchQuery.toLowerCase())
-            ).toList();
+            final filtered = courses
+                .where(
+                  (c) =>
+                      c.fullName.toLowerCase().contains(
+                        searchQuery.toLowerCase(),
+                      ) ||
+                      c.abbreviation.toLowerCase().contains(
+                        searchQuery.toLowerCase(),
+                      ),
+                )
+                .toList();
 
             return Container(
               height: MediaQuery.of(context).size.height * 0.75,
@@ -488,10 +525,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           leading: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              gradient: LinearGradient(colors: course.gradientColors),
+                              gradient: LinearGradient(
+                                colors: course.gradientColors,
+                              ),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Icon(course.icon, color: Colors.white, size: 24),
+                            child: Icon(
+                              course.icon,
+                              color: Colors.white,
+                              size: 24,
+                            ),
                           ),
                           title: Text(course.fullName),
                           subtitle: Text(course.abbreviation),
@@ -500,7 +543,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => CourseSubjectsScreen(course: course),
+                                builder: (context) =>
+                                    CourseSubjectsScreen(course: course),
                               ),
                             );
                           },
@@ -522,7 +566,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.construction_rounded, size: 64, color: Colors.grey.shade400),
+          Icon(
+            Icons.construction_rounded,
+            size: 64,
+            color: Colors.grey.shade400,
+          ),
           const SizedBox(height: 16),
           Text(
             'Coming Soon',
@@ -545,10 +593,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildCoursesTab({bool isPYQ = false, bool isPlacement = false}) {
     final filtered = _coursesSearchQuery.isEmpty
         ? courses
-        : courses.where((c) =>
-            c.fullName.toLowerCase().contains(_coursesSearchQuery.toLowerCase()) ||
-            c.abbreviation.toLowerCase().contains(_coursesSearchQuery.toLowerCase())
-          ).toList();
+        : courses
+              .where(
+                (c) =>
+                    c.fullName.toLowerCase().contains(
+                      _coursesSearchQuery.toLowerCase(),
+                    ) ||
+                    c.abbreviation.toLowerCase().contains(
+                      _coursesSearchQuery.toLowerCase(),
+                    ),
+              )
+              .toList();
 
     return Container(
       color: const Color(0xFFF5F5F5),
@@ -579,7 +634,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isPlacement ? 'Placements' : isPYQ ? 'PYQ Papers' : 'Courses',
+                  isPlacement
+                      ? 'Placements'
+                      : isPYQ
+                      ? 'PYQ Papers'
+                      : 'Courses',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 24,
@@ -588,7 +647,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  isPlacement ? 'Placement materials' : isPYQ ? 'Previous year question papers' : 'Find your branch',
+                  isPlacement
+                      ? 'Placement materials'
+                      : isPYQ
+                      ? 'Previous year question papers'
+                      : 'Find your branch',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.7),
                     fontSize: 14,
@@ -610,19 +673,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                   child: TextField(
                     controller: _coursesSearchController,
-                    onChanged: (value) => setState(() => _coursesSearchQuery = value),
+                    onChanged: (value) =>
+                        setState(() => _coursesSearchQuery = value),
                     style: const TextStyle(fontSize: 15),
                     decoration: InputDecoration(
                       hintText: 'Search courses...',
-                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 15),
+                      hintStyle: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 15,
+                      ),
                       prefixIcon: const Padding(
                         padding: EdgeInsets.only(left: 16, right: 8),
-                        child: Icon(Icons.search_rounded, color: Color(0xFF2D3E50), size: 22),
+                        child: Icon(
+                          Icons.search_rounded,
+                          color: Color(0xFF2D3E50),
+                          size: 22,
+                        ),
                       ),
                       prefixIconConstraints: const BoxConstraints(minWidth: 46),
                       suffixIcon: _coursesSearchQuery.isNotEmpty
                           ? IconButton(
-                              icon: Icon(Icons.clear_rounded, color: Colors.grey.shade400, size: 20),
+                              icon: Icon(
+                                Icons.clear_rounded,
+                                color: Colors.grey.shade400,
+                                size: 20,
+                              ),
                               onPressed: () {
                                 _coursesSearchController.clear();
                                 setState(() => _coursesSearchQuery = '');
@@ -643,7 +718,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         borderRadius: BorderRadius.circular(24),
                         borderSide: BorderSide.none,
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 14),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 0,
+                        vertical: 14,
+                      ),
                     ),
                   ),
                 ),
@@ -656,7 +734,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ? Center(
                     child: Text(
                       'No courses found',
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 16),
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 16,
+                      ),
                     ),
                   )
                 : ListView.builder(
@@ -665,7 +746,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     itemBuilder: (context, index) {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: _buildVerticalCourseCard(filtered[index], isPYQ: isPYQ, isPlacement: isPlacement),
+                        child: _buildVerticalCourseCard(
+                          filtered[index],
+                          isPYQ: isPYQ,
+                          isPlacement: isPlacement,
+                        ),
                       );
                     },
                   ),
@@ -679,10 +764,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final categories = PlacementCategory.allCategories;
     final filtered = _coursesSearchQuery.isEmpty
         ? categories
-        : categories.where((c) =>
-            c.name.toLowerCase().contains(_coursesSearchQuery.toLowerCase()) ||
-            c.subtitle.toLowerCase().contains(_coursesSearchQuery.toLowerCase())
-          ).toList();
+        : categories
+              .where(
+                (c) =>
+                    c.name.toLowerCase().contains(
+                      _coursesSearchQuery.toLowerCase(),
+                    ) ||
+                    c.subtitle.toLowerCase().contains(
+                      _coursesSearchQuery.toLowerCase(),
+                    ),
+              )
+              .toList();
 
     return Container(
       color: const Color(0xFFF5F5F5),
@@ -742,19 +834,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                   child: TextField(
                     controller: _coursesSearchController,
-                    onChanged: (value) => setState(() => _coursesSearchQuery = value),
+                    onChanged: (value) =>
+                        setState(() => _coursesSearchQuery = value),
                     style: const TextStyle(fontSize: 15),
                     decoration: InputDecoration(
                       hintText: 'Search categories...',
-                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 15),
+                      hintStyle: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 15,
+                      ),
                       prefixIcon: const Padding(
                         padding: EdgeInsets.only(left: 16, right: 8),
-                        child: Icon(Icons.search_rounded, color: Color(0xFF2D3E50), size: 22),
+                        child: Icon(
+                          Icons.search_rounded,
+                          color: Color(0xFF2D3E50),
+                          size: 22,
+                        ),
                       ),
                       prefixIconConstraints: const BoxConstraints(minWidth: 46),
                       suffixIcon: _coursesSearchQuery.isNotEmpty
                           ? IconButton(
-                              icon: Icon(Icons.clear_rounded, color: Colors.grey.shade400, size: 20),
+                              icon: Icon(
+                                Icons.clear_rounded,
+                                color: Colors.grey.shade400,
+                                size: 20,
+                              ),
                               onPressed: () {
                                 _coursesSearchController.clear();
                                 setState(() => _coursesSearchQuery = '');
@@ -775,7 +879,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         borderRadius: BorderRadius.circular(24),
                         borderSide: BorderSide.none,
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 14),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 0,
+                        vertical: 14,
+                      ),
                     ),
                   ),
                 ),
@@ -787,7 +894,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ? Center(
                     child: Text(
                       'No categories found',
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 16),
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 16,
+                      ),
                     ),
                   )
                 : ListView.builder(
@@ -812,7 +922,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => PlacementCategoryFilesScreen(category: category),
+            builder: (context) =>
+                PlacementCategoryFilesScreen(category: category),
           ),
         );
       },
@@ -879,13 +990,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildVerticalCourseCard(Course course, {bool isPYQ = false, bool isPlacement = false}) {
+  Widget _buildVerticalCourseCard(
+    Course course, {
+    bool isPYQ = false,
+    bool isPlacement = false,
+  }) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => CourseSubjectsScreen(course: course, isPYQ: isPYQ, isPlacement: isPlacement),
+            builder: (context) => CourseSubjectsScreen(
+              course: course,
+              isPYQ: isPYQ,
+              isPlacement: isPlacement,
+            ),
           ),
         );
       },
@@ -986,7 +1105,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF2D3E50).withOpacity(0.1) : Colors.transparent,
+          color: isSelected
+              ? const Color(0xFF2D3E50).withOpacity(0.1)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -994,7 +1115,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           children: [
             Icon(
               icon,
-              color: isSelected ? const Color(0xFF2D3E50) : Colors.grey.shade600,
+              color: isSelected
+                  ? const Color(0xFF2D3E50)
+                  : Colors.grey.shade600,
               size: 24,
             ),
             const SizedBox(height: 4),
@@ -1003,7 +1126,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                color: isSelected ? const Color(0xFF2D3E50) : Colors.grey.shade600,
+                color: isSelected
+                    ? const Color(0xFF2D3E50)
+                    : Colors.grey.shade600,
               ),
             ),
           ],
@@ -1035,7 +1160,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF1A2530), Color(0xFF2D3E50), Color(0xFF3D5266)],
+                  colors: [
+                    Color(0xFF1A2530),
+                    Color(0xFF2D3E50),
+                    Color(0xFF3D5266),
+                  ],
                 ),
               ),
               child: Column(
@@ -1046,14 +1175,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     height: 64,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 2,
+                      ),
                       color: Colors.white.withOpacity(0.15),
                     ),
-                    child: const Icon(Icons.person, size: 32, color: Colors.white),
+                    child: const Icon(
+                      Icons.person,
+                      size: 32,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    authState.userName.isNotEmpty ? authState.userName : 'Guest User',
+                    authState.userName.isNotEmpty
+                        ? authState.userName
+                        : 'Guest User',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -1062,7 +1200,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    authState.userPhone.isNotEmpty ? '+91 ${authState.userPhone}' : 'Not logged in',
+                    authState.userPhone.isNotEmpty
+                        ? '+91 ${authState.userPhone}'
+                        : 'Not logged in',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.7),
                       fontSize: 12,
@@ -1076,33 +1216,70 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // Menu Items
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 16,
+                  horizontal: 12,
+                ),
                 children: [
-                  _buildDrawerItem(Icons.home_rounded, 'Home', const Color(0xFF2196F3), () {
-                    Navigator.pop(context);
-                    setState(() => _currentNavIndex = 0);
-                  }),
+                  _buildDrawerItem(
+                    Icons.home_rounded,
+                    'Home',
+                    const Color(0xFF2196F3),
+                    () {
+                      Navigator.pop(context);
+                      setState(() => _currentNavIndex = 0);
+                    },
+                  ),
                   const SizedBox(height: 8),
-                  _buildDrawerItem(Icons.bookmark_rounded, 'Bookmarks', const Color(0xFFFF9800), () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const BookmarksScreen()),
-                    );
-                  }),
+                  _buildDrawerItem(
+                    Icons.bookmark_rounded,
+                    'Bookmarks',
+                    const Color(0xFFFF9800),
+                    () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const BookmarksScreen(),
+                        ),
+                      );
+                    },
+                  ),
                   const SizedBox(height: 8),
-                  _buildDrawerItem(Icons.upload_file_rounded, 'Upload Notes', const Color(0xFF4CAF50), () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const UploadNotesScreen()),
-                    );
-                  }),
+                  _buildDrawerItem(
+                    Icons.workspace_premium_rounded,
+                    'Membership',
+                    const Color(0xFF7C3AED),
+                    () {
+                      Navigator.pop(context);
+                      _openSubscriptionScreen();
+                    },
+                  ),
                   const SizedBox(height: 8),
-                  _buildDrawerItem(Icons.settings_rounded, 'Settings', const Color(0xFF9C27B0), () {
-                    Navigator.pop(context);
-                    _showComingSoonDialog('Settings');
-                  }),
+                  _buildDrawerItem(
+                    Icons.upload_file_rounded,
+                    'Upload Notes',
+                    const Color(0xFF4CAF50),
+                    () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const UploadNotesScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _buildDrawerItem(
+                    Icons.settings_rounded,
+                    'Settings',
+                    const Color(0xFF9C27B0),
+                    () {
+                      Navigator.pop(context);
+                      _showComingSoonDialog('Settings');
+                    },
+                  ),
                 ],
               ),
             ),
@@ -1115,42 +1292,62 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Column(
                 children: [
-                  _buildDrawerItem(Icons.logout_rounded, 'Logout', const Color(0xFFF44336), () async {
-                    Navigator.pop(context);
-                    final shouldLogout = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Logout'),
-                        content: const Text('Are you sure you want to logout?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('Cancel'),
+                  _buildDrawerItem(
+                    Icons.logout_rounded,
+                    'Logout',
+                    const Color(0xFFF44336),
+                    () async {
+                      Navigator.pop(context);
+                      final shouldLogout = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Logout'),
+                          content: const Text(
+                            'Are you sure you want to logout?',
                           ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            style: TextButton.styleFrom(foregroundColor: Colors.red),
-                            child: const Text('Logout'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (shouldLogout == true) {
-                      await ref.read(authProvider.notifier).logout();
-                      if (mounted) {
-                        Navigator.pushAndRemoveUntil(
-                          context,
-                          MaterialPageRoute(builder: (context) => const SplashScreen()),
-                          (route) => false,
-                        );
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.red,
+                              ),
+                              child: const Text('Logout'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (shouldLogout == true) {
+                        await ref.read(authProvider.notifier).logout();
+                        if (mounted) {
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SplashScreen(),
+                            ),
+                            (route) => false,
+                          );
+                        }
                       }
-                    }
-                  }),
+                    },
+                  ),
                   const SizedBox(height: 8),
-                  _buildDrawerItem(Icons.privacy_tip_rounded, 'Privacy Policy', const Color(0xFF2196F3), () {
-                    Navigator.pop(context);
-                    launchUrl(Uri.parse('https://notes-app-server-wczw.onrender.com/privacy-policy'));
-                  }),
+                  _buildDrawerItem(
+                    Icons.privacy_tip_rounded,
+                    'Privacy Policy',
+                    const Color(0xFF2196F3),
+                    () {
+                      Navigator.pop(context);
+                      launchUrl(
+                        Uri.parse(
+                          'https://notes-app-server-wczw.onrender.com/privacy-policy',
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
@@ -1161,7 +1358,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildDrawerItem(IconData icon, String label, Color color, VoidCallback onTap) {
+  Widget _buildDrawerItem(
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return Material(
       color: Colors.transparent,
       child: InkWell(

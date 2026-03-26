@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/user_subscription.dart';
 import '../services/api_service.dart';
 
 /// Authentication state
@@ -9,6 +10,7 @@ class AuthState {
   final bool isLoggedIn;
   final bool isLoading;
   final List<String> favourites;
+  final UserSubscription subscription;
 
   const AuthState({
     this.userName = '',
@@ -16,6 +18,7 @@ class AuthState {
     this.isLoggedIn = false,
     this.isLoading = true,
     this.favourites = const [],
+    this.subscription = const UserSubscription(),
   });
 
   AuthState copyWith({
@@ -24,6 +27,7 @@ class AuthState {
     bool? isLoggedIn,
     bool? isLoading,
     List<String>? favourites,
+    UserSubscription? subscription,
   }) {
     return AuthState(
       userName: userName ?? this.userName,
@@ -31,10 +35,12 @@ class AuthState {
       isLoggedIn: isLoggedIn ?? this.isLoggedIn,
       isLoading: isLoading ?? this.isLoading,
       favourites: favourites ?? this.favourites,
+      subscription: subscription ?? this.subscription,
     );
   }
 
   bool isFavourite(String pdfId) => favourites.contains(pdfId);
+  bool get hasActiveSubscription => subscription.isEntitled;
 }
 
 /// Authentication state notifier
@@ -57,7 +63,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
 
     if (isLoggedIn) {
-      await loadFavourites();
+      await refreshProfile();
     }
   }
 
@@ -74,7 +80,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       isLoading: false,
     );
 
-    await loadFavourites();
+    await refreshProfile();
   }
 
   /// Logout - clear prefs and reset state
@@ -91,8 +97,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
   }
 
-  /// Load favourites from server
-  Future<void> loadFavourites() async {
+  /// Load the latest profile from the backend
+  Future<void> refreshProfile() async {
     if (state.userPhone.isEmpty) return;
 
     try {
@@ -100,12 +106,34 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (result['success'] == true && result['data'] != null) {
         final data = result['data'] as Map<String, dynamic>;
         final user = (data['user'] as Map<String, dynamic>?) ?? data;
-        final favs = (user['favourites'] as List?)?.cast<String>() ?? [];
-        state = state.copyWith(favourites: favs);
+        _applyUserPayload(user);
       }
     } catch (_) {
-      // Silently fail — keep empty favourites
+      // Keep the current state if the profile refresh fails.
     }
+  }
+
+  /// Backwards-compatible alias for older call sites.
+  Future<void> loadFavourites() => refreshProfile();
+
+  /// Update auth state from a backend user payload
+  void updateUserData(Map<String, dynamic> user) {
+    _applyUserPayload(user);
+  }
+
+  void _applyUserPayload(Map<String, dynamic> user) {
+    final favs =
+        (user['favourites'] as List?)?.cast<String>() ?? state.favourites;
+    final subscription = UserSubscription.fromJson(
+      (user['subscription'] as Map<String, dynamic>?)?.cast<String, dynamic>(),
+    );
+
+    state = state.copyWith(
+      userName: (user['name'] as String?) ?? state.userName,
+      userPhone: (user['phone'] as String?) ?? state.userPhone,
+      favourites: favs,
+      subscription: subscription,
+    );
   }
 
   /// Toggle a PDF in favourites
@@ -119,13 +147,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
       current.add(pdfId);
     }
 
-    // Optimistic update
     state = state.copyWith(favourites: current);
 
-    // Sync with server
     final result = await ApiService.updateFavourites(state.userPhone, current);
     if (result['success'] == true && result['favourites'] != null) {
-      state = state.copyWith(favourites: List<String>.from(result['favourites']));
+      state = state.copyWith(
+        favourites: List<String>.from(result['favourites']),
+      );
     }
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdfx/pdfx.dart';
@@ -7,8 +8,13 @@ import 'package:screen_protector/screen_protector.dart';
 /// Fullscreen PDF Viewer - simple page view with zoom and thumbnail navigation
 class PdfViewerScreen extends StatefulWidget {
   final String pdfUrl;
+  final String userPhone;
 
-  const PdfViewerScreen({super.key, required this.pdfUrl});
+  const PdfViewerScreen({
+    super.key,
+    required this.pdfUrl,
+    required this.userPhone,
+  });
 
   @override
   State<PdfViewerScreen> createState() => _PdfViewerScreenState();
@@ -21,6 +27,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   int _totalPages = 0;
   bool _documentReady = false;
   bool _scrollMode = false; // false = page mode, true = scroll mode
+  String? _errorMessage;
   PdfDocument? _loadedDocument;
   final Map<int, PdfPageImage?> _pageCache = {};
 
@@ -62,6 +69,35 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     }
   }
 
+  Map<String, String> get _requestHeaders => {
+        'X-User-Phone': widget.userPhone.trim(),
+      };
+
+  Future<Uint8List> _readPdfBytes() async {
+    if (widget.userPhone.trim().isEmpty) {
+      throw Exception('Login and an active subscription are required to open this PDF.');
+    }
+
+    return http.readBytes(
+      Uri.parse(widget.pdfUrl),
+      headers: _requestHeaders,
+    );
+  }
+
+  String _formatLoadError(Object error) {
+    final message = error.toString();
+
+    if (widget.userPhone.trim().isEmpty || message.contains('401')) {
+      return 'Please login again to open this PDF.';
+    }
+
+    if (message.contains('403')) {
+      return 'An active subscription is required to open this PDF.';
+    }
+
+    return 'Unable to load this PDF right now.';
+  }
+
   void _onZoomChanged() {
     final scale = _transformationController.value.getMaxScaleOnAxis();
     final zoomed = scale > 1.05;
@@ -73,25 +109,31 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 
   Future<PdfDocument> _loadScrollDocument() async {
-    final bytes = await http.readBytes(Uri.parse(widget.pdfUrl));
+    final bytes = await _readPdfBytes();
     return await PdfDocument.openData(bytes);
   }
 
   Future<void> _loadDocument() async {
     try {
-      final bytes = await http.readBytes(Uri.parse(widget.pdfUrl));
+      final bytes = await _readPdfBytes();
       final doc = await PdfDocument.openData(bytes);
       _loadedDocument = doc;
       if (mounted) {
         setState(() {
           _totalPages = doc.pagesCount;
           _documentReady = true;
+          _errorMessage = null;
         });
         // Preload first page and adjacent
         _preloadAdjacentPages(1);
       }
     } catch (e) {
       debugPrint('Error loading document: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = _formatLoadError(e);
+        });
+      }
     }
   }
 
@@ -311,8 +353,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                         if (snapshot.hasError) {
                           return Center(
                             child: Text(
-                              'Error loading PDF: ${snapshot.error}',
+                              _formatLoadError(snapshot.error!),
                               style: const TextStyle(color: Colors.black54),
+                              textAlign: TextAlign.center,
                             ),
                           );
                         }
@@ -326,7 +369,18 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                         );
                       },
                     )
-                  : _documentReady
+                  : _errorMessage != null
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(color: Colors.black54),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        )
+                      : _documentReady
                       ? Listener(
                           onPointerDown: (_) {
                             _pointerCount++;

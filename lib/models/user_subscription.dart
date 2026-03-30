@@ -60,35 +60,37 @@ class UserSubscription {
       return const UserSubscription();
     }
 
+    final payload = _resolvePayload(json);
+
     return UserSubscription(
-      status: (json['status'] as String?) ?? 'none',
-      planCode: json['planCode'] as String?,
-      planId: json['planId'] as String?,
-      subscriptionId: json['subscriptionId'] as String?,
-      shortUrl: json['shortUrl'] as String?,
-      customerId: json['customerId'] as String?,
-      lastPaymentId: json['lastPaymentId'] as String?,
-      lastPaymentMethod: json['lastPaymentMethod'] as String?,
-      currentStart: _parseDate(json['currentStart']),
-      currentEnd: _parseDate(json['currentEnd']),
-      chargeAt: _parseDate(json['chargeAt']),
-      startAt: _parseDate(json['startAt']),
-      endAt: _parseDate(json['endAt']),
-      endedAt: _parseDate(json['endedAt']),
-      expireBy: _parseDate(json['expireBy']),
-      paidCount: (json['paidCount'] as num?)?.toInt() ?? 0,
-      remainingCount: (json['remainingCount'] as num?)?.toInt(),
-      totalCount: (json['totalCount'] as num?)?.toInt(),
-      customerNotify: json['customerNotify'] as bool? ?? true,
-      notes: ((json['notes'] as Map?) ?? const {}).map(
+      status: _asString(payload['status']) ?? 'none',
+      planCode: _asString(payload['planCode']),
+      planId: _asString(payload['planId']),
+      subscriptionId: _asString(payload['subscriptionId']),
+      shortUrl: _asString(payload['shortUrl']),
+      customerId: _asString(payload['customerId']),
+      lastPaymentId: _asString(payload['lastPaymentId']),
+      lastPaymentMethod: _asString(payload['lastPaymentMethod']),
+      currentStart: _parseDate(payload['currentStart']),
+      currentEnd: _parseDate(payload['currentEnd']),
+      chargeAt: _parseDate(payload['chargeAt']),
+      startAt: _parseDate(payload['startAt']),
+      endAt: _parseDate(payload['endAt']),
+      endedAt: _parseDate(payload['endedAt']),
+      expireBy: _parseDate(payload['expireBy']),
+      paidCount: _asInt(payload['paidCount']) ?? 0,
+      remainingCount: _asInt(payload['remainingCount']),
+      totalCount: _asInt(payload['totalCount']),
+      customerNotify: payload['customerNotify'] as bool? ?? true,
+      notes: ((payload['notes'] as Map?) ?? const {}).map(
         (key, value) => MapEntry(key.toString(), value.toString()),
       ),
-      lastWebhookEvent: json['lastWebhookEvent'] as String?,
-      lastWebhookEventId: json['lastWebhookEventId'] as String?,
-      lastWebhookReceivedAt: _parseDate(json['lastWebhookReceivedAt']),
-      lastSignatureVerifiedAt: _parseDate(json['lastSignatureVerifiedAt']),
-      cancelAtCycleEnd: json['cancelAtCycleEnd'] as bool? ?? false,
-      updatedAt: _parseDate(json['updatedAt']),
+      lastWebhookEvent: _asString(payload['lastWebhookEvent']),
+      lastWebhookEventId: _asString(payload['lastWebhookEventId']),
+      lastWebhookReceivedAt: _parseDate(payload['lastWebhookReceivedAt']),
+      lastSignatureVerifiedAt: _parseDate(payload['lastSignatureVerifiedAt']),
+      cancelAtCycleEnd: payload['cancelAtCycleEnd'] as bool? ?? false,
+      updatedAt: _parseDate(payload['updatedAt']),
     );
   }
 
@@ -210,6 +212,104 @@ class UserSubscription {
 
   DateTime? get nextBillingAt => currentEnd ?? chargeAt;
 
+  static Map<String, dynamic> _resolvePayload(Map<String, dynamic> json) {
+    final candidates = <Map<String, dynamic>>[
+      json,
+      if (_asMap(json['_doc']) != null) _asMap(json['_doc'])!,
+      if (_asMap(json[r'$__parent']) != null &&
+          _asMap(_asMap(json[r'$__parent'])!['subscription']) != null)
+        _asMap(_asMap(json[r'$__parent'])!['subscription'])!,
+      if (_asMap(json['subscription']) != null) _asMap(json['subscription'])!,
+    ];
+
+    var bestCandidate = json;
+    var bestScore = _scorePayload(json);
+
+    for (final candidate in candidates.skip(1)) {
+      final score = _scorePayload(candidate);
+      if (score > bestScore) {
+        bestCandidate = candidate;
+        bestScore = score;
+      }
+    }
+
+    return bestCandidate;
+  }
+
+  static int _scorePayload(Map<String, dynamic> json) {
+    var score = 0;
+
+    final status = _asString(json['status']);
+    if (status != null && status != 'none') {
+      score += 4;
+    }
+
+    if (_asString(json['subscriptionId']) != null) {
+      score += 4;
+    }
+
+    if (_asString(json['planCode']) != null) {
+      score += 3;
+    }
+
+    if (_asString(json['planId']) != null) {
+      score += 2;
+    }
+
+    if (_parseDate(json['currentEnd']) != null ||
+        _parseDate(json['chargeAt']) != null ||
+        _parseDate(json['startAt']) != null) {
+      score += 2;
+    }
+
+    if (_asInt(json['remainingCount']) != null) {
+      score += 1;
+    }
+
+    if (_asInt(json['totalCount']) != null) {
+      score += 1;
+    }
+
+    if ((json['notes'] as Map?)?.isNotEmpty ?? false) {
+      score += 1;
+    }
+
+    return score;
+  }
+
+  static Map<String, dynamic>? _asMap(dynamic value) {
+    if (value is Map) {
+      return Map<String, dynamic>.from(value);
+    }
+
+    return null;
+  }
+
+  static String? _asString(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+
+    final text = value.toString().trim();
+    if (text.isEmpty || text == 'null') {
+      return null;
+    }
+
+    return text;
+  }
+
+  static int? _asInt(dynamic value) {
+    if (value is num) {
+      return value.toInt();
+    }
+
+    if (value is String) {
+      return int.tryParse(value);
+    }
+
+    return null;
+  }
+
   static DateTime? _parseDate(dynamic value) {
     if (value == null) {
       return null;
@@ -217,6 +317,10 @@ class UserSubscription {
 
     if (value is DateTime) {
       return value;
+    }
+
+    if (value is Map && value.containsKey(r'$date')) {
+      return _parseDate(value[r'$date']);
     }
 
     return DateTime.tryParse(value.toString());

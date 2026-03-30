@@ -111,7 +111,9 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     );
     state = state.copyWith(
       isProcessing: false,
-      errorMessage: null,
+      errorMessage: result['success'] == true
+          ? null
+          : result['message'] as String?,
       clearError: result['success'] == true,
     );
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_subscription.dart';
@@ -103,12 +104,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     try {
       final result = await ApiService.getUserProfile(state.userPhone);
+      debugPrint('[Auth] getUserProfile result: $result');
+
       if (result['success'] == true && result['data'] != null) {
         final data = result['data'] as Map<String, dynamic>;
-        final user = (data['user'] as Map<String, dynamic>?) ?? data;
+        // Backend returns {success, data: {user...}} — try data['user'], then
+        // data['data'] (double-wrapped), then fall back to data itself.
+        final user = (data['user'] as Map<String, dynamic>?)
+            ?? (data['data'] as Map<String, dynamic>?)
+            ?? data;
+        debugPrint('[Auth] Extracted user subscription field: ${user['subscription']}');
         _applyUserPayload(user);
+      } else {
+        debugPrint('[Auth] getUserProfile failed or no data: success=${result['success']}, data=${result['data']}');
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Auth] refreshProfile exception: $e');
       // Keep the current state if the profile refresh fails.
     }
   }
@@ -118,6 +129,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// Update auth state from a backend user payload
   void updateUserData(Map<String, dynamic> user) {
+    debugPrint('[Auth] updateUserData called with subscription: ${user['subscription']}');
     _applyUserPayload(user);
   }
 
@@ -127,6 +139,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final subscription = UserSubscription.fromJson(
       (user['subscription'] as Map<String, dynamic>?)?.cast<String, dynamic>(),
     );
+
+    debugPrint('[Auth] Parsed subscription: status=${subscription.status}, isEntitled=${subscription.isEntitled}, subscriptionId=${subscription.subscriptionId}');
 
     state = state.copyWith(
       userName: (user['name'] as String?) ?? state.userName,

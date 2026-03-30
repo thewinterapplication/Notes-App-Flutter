@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -9,8 +10,8 @@ import '../models/subscription_plan.dart';
 /// API Service to connect to server
 class ApiService {
   // Single source of truth - use machine IP for all platforms
-  // static const String baseUrl = 'https://notes-app-server-wczw.onrender.com';
-  static const String baseUrl = 'http://192.168.1.18:3000';
+  static const String baseUrl = 'https://notes-app-server-wczw.onrender.com';
+  // static const String baseUrl = 'http://10.142.181.35 `:3000';
 
   // Retry configuration for Render.com free tier (server may be sleeping)
   static const int maxRetries = 3;
@@ -487,11 +488,14 @@ class ApiService {
     required String phone,
     required String planCode,
   }) async {
+    developer.log('[API] createSubscriptionCheckout: phone=$phone, planCode=$planCode', name: 'subscription');
     try {
       final response = await _postWithRetry(
         '$baseUrl/api/subscriptions/create',
         {'phone': phone, 'planCode': planCode},
       );
+
+      developer.log('[API] createSubscriptionCheckout response: status=${response.statusCode}, body=${response.body}', name: 'subscription');
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       if ((response.statusCode == 200 || response.statusCode == 201) &&
@@ -505,6 +509,7 @@ class ApiService {
                 ?.cast<String, dynamic>() ??
             const {};
 
+        developer.log('[API] Checkout session: subscriptionId=${checkout.subscriptionId}', name: 'subscription');
         return {
           'success': true,
           'checkout': checkout,
@@ -513,12 +518,14 @@ class ApiService {
         };
       }
 
+      developer.log('[API] createSubscriptionCheckout failed: ${data['message']}', name: 'subscription');
       return {
         'success': false,
         'message': data['message'] ?? 'Failed to start checkout',
         'data': data['data'],
       };
     } catch (e) {
+      developer.log('[API] createSubscriptionCheckout exception: $e', name: 'subscription');
       return {
         'success': false,
         'message': 'Server is starting up. Please wait and try again.',

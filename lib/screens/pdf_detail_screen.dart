@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import 'auth/login_page.dart';
 import 'pdf_viewer_screen.dart';
+import 'subscription_screen.dart';
 
 /// PDF Detail Screen - Shows PDF info before opening viewer
 class PdfDetailScreen extends ConsumerStatefulWidget {
@@ -25,18 +26,87 @@ class PdfDetailScreen extends ConsumerStatefulWidget {
 class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
   PdfFile get pdfFile => widget.pdfFile;
   Course get course => widget.course;
+  bool _isCheckingAccess = false;
 
-  @override
-  void initState() {
-    super.initState();
+  Future<void> _openPdfViewer(AuthState authState) async {
+    if (_isCheckingAccess) {
+      return;
+    }
+
+    if (!authState.isLoggedIn) {
+      _showSubscriptionDialog(isLoggedIn: false);
+      return;
+    }
+
+    var latestAuthState = authState;
+    if (!latestAuthState.hasActiveSubscription) {
+      setState(() {
+        _isCheckingAccess = true;
+      });
+
+      try {
+        await ref.read(authProvider.notifier).refreshProfile();
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isCheckingAccess = false;
+          });
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      latestAuthState = ref.read(authProvider);
+      if (!latestAuthState.hasActiveSubscription) {
+        _showSubscriptionDialog(isLoggedIn: true);
+        return;
+      }
+    }
+
     ApiService.incrementViewCount(pdfFile.id);
-  }
-
-  void _openPdfViewer(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => PdfViewerScreen(pdfUrl: pdfFile.fileUrl),
+        builder: (context) => PdfViewerScreen(
+          pdfUrl: pdfFile.fileUrl,
+          userPhone: latestAuthState.userPhone,
+        ),
+      ),
+    );
+  }
+
+  void _showSubscriptionDialog({required bool isLoggedIn}) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isLoggedIn ? 'Subscription Required' : 'Login Required'),
+        content: Text(
+          isLoggedIn
+              ? 'You need an active subscription to open this PDF.'
+              : 'Please login first, then purchase a subscription to open this PDF.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                this.context,
+                MaterialPageRoute(
+                  builder: (context) => isLoggedIn
+                      ? const SubscriptionScreen()
+                      : const LoginPage(),
+                ),
+              );
+            },
+            child: Text(isLoggedIn ? 'View Plans' : 'Login'),
+          ),
+        ],
       ),
     );
   }
@@ -79,6 +149,7 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final isFav = authState.isFavourite(pdfFile.id);
+    final canOpenPdf = authState.hasActiveSubscription;
     return Scaffold(
       backgroundColor: Colors.white,
       body: SingleChildScrollView(
@@ -193,7 +264,7 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                               top: 0,
                               left: 0,
                               child: GestureDetector(
-                                onTap: () => _openPdfViewer(context),
+                                onTap: () => _openPdfViewer(authState),
                                 child: Stack(
                                   children: [
                                     Container(
@@ -284,10 +355,16 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                                                 ),
                                                 borderRadius: BorderRadius.circular(20),
                                               ),
-                                              child: const Center(
+                                              child: Center(
                                                 child: Text(
-                                                  'Open',
-                                                  style: TextStyle(
+                                                  _isCheckingAccess
+                                                      ? 'Checking...'
+                                                      : canOpenPdf
+                                                      ? 'Open'
+                                                      : authState.isLoggedIn
+                                                      ? 'Subscribe to open'
+                                                      : 'Login to open',
+                                                  style: const TextStyle(
                                                     color: Colors.white,
                                                     fontSize: 13,
                                                     fontWeight: FontWeight.w600,

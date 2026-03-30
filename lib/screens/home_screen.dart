@@ -62,11 +62,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  void _openSubscriptionScreen() {
-    Navigator.push(
+  Future<void> _openSubscriptionScreen() async {
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const SubscriptionScreen()),
     );
+    ref.read(authProvider.notifier).refreshProfile();
   }
 
   @override
@@ -199,10 +200,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
           const SizedBox(height: 18),
 
-          SubscriptionBanner(
-            subscription: ref.watch(authProvider).subscription,
-            onTap: _openSubscriptionScreen,
-          ),
+          if (!ref.watch(authProvider).hasActiveSubscription)
+            SubscriptionBanner(
+              subscription: ref.watch(authProvider).subscription,
+              onTap: _openSubscriptionScreen,
+            ),
 
           const SizedBox(height: 24),
 

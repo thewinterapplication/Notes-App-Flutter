@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -51,10 +52,18 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   }
 
   Future<void> _handlePaymentSuccess(PaymentSuccessResponse response) async {
+    developer.log(
+      '[Checkout] Payment success: paymentId=${response.paymentId}',
+      name: 'subscription',
+    );
     final authState = ref.read(authProvider);
     final session = _activeSession;
 
     if (session == null || authState.userPhone.isEmpty) {
+      developer.log(
+        '[Checkout] Missing session or phone, skipping verify',
+        name: 'subscription',
+      );
       return;
     }
 
@@ -90,9 +99,16 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
           ? const Color(0xFF059669)
           : const Color(0xFFDC2626),
     );
+    if (result['success'] == true) {
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _handlePaymentError(PaymentFailureResponse response) async {
+    developer.log(
+      '[Checkout] Payment error: code=${response.code}, message=${response.message}',
+      name: 'subscription',
+    );
     final phone = ref.read(authProvider).userPhone;
     if (phone.isNotEmpty) {
       await ref.read(subscriptionProvider.notifier).refreshSubscription(phone);
@@ -140,17 +156,27 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     if (!mounted) return;
 
     if (result['success'] != true || result['checkout'] == null) {
-      _showSnackBar(
-        'Unable to start secure checkout right now.',
-        backgroundColor: const Color(0xFFDC2626),
-      );
+      final failureMessage =
+          (result['message'] as String?)?.trim().isNotEmpty == true
+          ? (result['message'] as String).trim()
+          : 'Unable to start secure checkout right now.';
+      _showSnackBar(failureMessage, backgroundColor: const Color(0xFFDC2626));
       return;
     }
 
     final checkout = result['checkout'] as SubscriptionCheckoutSession;
     _activeSession = checkout;
 
+    developer.log(
+      '[Checkout] Session ready: subscriptionId=${checkout.subscriptionId}, keyId=${checkout.keyId}',
+      name: 'subscription',
+    );
+
     if (!(Platform.isAndroid || Platform.isIOS)) {
+      developer.log(
+        '[Checkout] Non-mobile platform, using shortUrl fallback',
+        name: 'subscription',
+      );
       await _openShortUrlFallback(checkout);
       return;
     }
@@ -168,9 +194,18 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       'retry': {'enabled': true, 'max_count': 1},
     };
 
+    developer.log(
+      '[Checkout] Opening Razorpay with options: $options',
+      name: 'subscription',
+    );
+
     try {
       _razorpay.open(options);
-    } catch (_) {
+    } catch (e) {
+      developer.log(
+        '[Checkout] Razorpay.open() failed: $e, using shortUrl fallback',
+        name: 'subscription',
+      );
       await _openShortUrlFallback(checkout);
     }
   }
@@ -219,9 +254,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   }
 
   Future<void> _openPoliciesScreen() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => const LegalLinksScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (context) => const LegalLinksScreen()));
   }
 
   Future<void> _showLoginSheet() async {
@@ -1203,11 +1238,7 @@ class _CheckoutLegalFooter extends StatelessWidget {
 }
 
 class _FooterLink extends StatelessWidget {
-  const _FooterLink({
-    required this.label,
-    required this.onTap,
-    this.icon,
-  });
+  const _FooterLink({required this.label, required this.onTap, this.icon});
 
   final String label;
   final VoidCallback onTap;
@@ -1235,10 +1266,7 @@ class _FooterLink extends StatelessWidget {
               decorationColor: Color(0xFF1D4ED8),
             ),
           ),
-          if (icon != null) ...[
-            const SizedBox(width: 4),
-            Icon(icon, size: 14),
-          ],
+          if (icon != null) ...[const SizedBox(width: 4), Icon(icon, size: 14)],
         ],
       ),
     );

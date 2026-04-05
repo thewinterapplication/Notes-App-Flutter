@@ -276,13 +276,6 @@ class _PlacementCategoryFilesScreenState
     );
   }
 
-  String _stripExtension(String fileName) {
-    if (fileName.toLowerCase().endsWith('.pdf')) {
-      return fileName.substring(0, fileName.length - 4);
-    }
-    return fileName;
-  }
-
   Widget _buildFileCard(BuildContext context, PdfFile file) {
     return GestureDetector(
       onTap: () => _openPdf(context, file),
@@ -316,7 +309,7 @@ class _PlacementCategoryFilesScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _stripExtension(file.fileName),
+                    file.displayTitle,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -330,9 +323,13 @@ class _PlacementCategoryFilesScreenState
                     children: [
                       Icon(Icons.person_outline, size: 14, color: category.gradientColors[0]),
                       const SizedBox(width: 4),
-                      Text(
-                        'Author',
-                        style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                      Expanded(
+                        child: Text(
+                          file.displayAuthor,
+                          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Icon(Icons.visibility_outlined, size: 14, color: category.gradientColors[0]),

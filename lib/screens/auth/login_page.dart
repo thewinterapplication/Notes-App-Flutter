@@ -330,36 +330,36 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               ),
             ),
               ),
-              // Skip Button - Top Right
-              Positioned(
-                top: 12,
-                right: 16,
-                child: GestureDetector(
-                  onTap: () {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const HomeScreen(),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      'Skip',
-                      style: TextStyle(
-                        color: Color(0xFF4A90D9),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              // // Skip Button - Top Right
+              // Positioned(
+              //   top: 12,
+              //   right: 16,
+              //   child: GestureDetector(
+              //     onTap: () {
+              //       Navigator.pushReplacement(
+              //         context,
+              //         MaterialPageRoute(
+              //           builder: (context) => const HomeScreen(),
+              //         ),
+              //       );
+              //     },
+              //     child: Container(
+              //       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              //       decoration: BoxDecoration(
+              //         color: Colors.white,
+              //         borderRadius: BorderRadius.circular(20),
+              //       ),
+              //       child: const Text(
+              //         'Skip',
+              //         style: TextStyle(
+              //           color: Color(0xFF4A90D9),
+              //           fontSize: 14,
+              //           fontWeight: FontWeight.w600,
+              //         ),
+              //       ),
+              //     ),
+              //   ),
+              // ),
             ],
           ),
         ),

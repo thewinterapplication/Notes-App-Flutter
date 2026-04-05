@@ -24,12 +24,32 @@ class PdfDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
+  static const Color _premiumGold = Color(0xFFB8860B);
+
   PdfFile get pdfFile => widget.pdfFile;
   Course get course => widget.course;
   bool _isCheckingAccess = false;
 
+  void _pushPdfViewer(String userPhone) {
+    ApiService.incrementViewCount(pdfFile.id);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PdfViewerScreen(
+          pdfUrl: pdfFile.fileUrl,
+          userPhone: userPhone,
+        ),
+      ),
+    );
+  }
+
   Future<void> _openPdfViewer(AuthState authState) async {
     if (_isCheckingAccess) {
+      return;
+    }
+
+    if (pdfFile.isFree) {
+      _pushPdfViewer(authState.userPhone);
       return;
     }
 
@@ -65,27 +85,18 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
       }
     }
 
-    ApiService.incrementViewCount(pdfFile.id);
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PdfViewerScreen(
-          pdfUrl: pdfFile.fileUrl,
-          userPhone: latestAuthState.userPhone,
-        ),
-      ),
-    );
+    _pushPdfViewer(latestAuthState.userPhone);
   }
 
   void _showSubscriptionDialog({required bool isLoggedIn}) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(isLoggedIn ? 'Subscription Required' : 'Login Required'),
+        title: Text(isLoggedIn ? 'Premium Note' : 'Login Required'),
         content: Text(
           isLoggedIn
-              ? 'You need an active subscription to open this PDF.'
-              : 'Please login first, then purchase a subscription to open this PDF.',
+              ? 'You need an active subscription to open this premium PDF.'
+              : 'Please login first, then purchase a subscription to open this premium PDF.',
         ),
         actions: [
           TextButton(
@@ -149,7 +160,7 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final isFav = authState.isFavourite(pdfFile.id);
-    final canOpenPdf = authState.hasActiveSubscription;
+    final canOpenPdf = pdfFile.isFree || authState.hasActiveSubscription;
     return Scaffold(
       backgroundColor: Colors.white,
       body: SingleChildScrollView(
@@ -232,7 +243,7 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      pdfFile.fileName.replaceAll('.pdf', ''),
+                                      pdfFile.displayTitle,
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 18,
@@ -246,15 +257,23 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                                       children: [
                                         Icon(Icons.person_outline, size: 16, color: Colors.white.withOpacity(0.7)),
                                         const SizedBox(width: 4),
-                                        Text(
-                                          'Author',
-                                          style: TextStyle(
-                                            color: Colors.white.withOpacity(0.7),
-                                            fontSize: 14,
+                                        Expanded(
+                                          child: Text(
+                                            pdfFile.displayAuthor,
+                                            style: TextStyle(
+                                              color: Colors.white.withOpacity(0.7),
+                                              fontSize: 14,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                       ],
                                     ),
+                                    if (pdfFile.hasAccessBadge) ...[
+                                      const SizedBox(height: 10),
+                                      _buildAccessBadge(pdfFile),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -359,6 +378,8 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                                                 child: Text(
                                                   _isCheckingAccess
                                                       ? 'Checking...'
+                                                      : pdfFile.isFree
+                                                      ? 'Open'
                                                       : canOpenPdf
                                                       ? 'Open'
                                                       : authState.isLoggedIn
@@ -431,7 +452,7 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Notes for ${pdfFile.fileName.replaceAll('.pdf', '')} - ${course.abbreviation}',
+                          'Notes for ${pdfFile.displayTitle} - ${course.abbreviation}',
                           style: const TextStyle(
                             fontSize: 14,
                             color: Colors.black87,
@@ -492,14 +513,16 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          course.fullName,
+                          pdfFile.displayAuthor,
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         Text(
-                          course.abbreviation,
+                          pdfFile.hasAccessBadge
+                              ? '${pdfFile.accessLabel} note | ${course.abbreviation}'
+                              : course.abbreviation,
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey.shade600,
@@ -533,6 +556,11 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                       _buildTopicChip(course.abbreviation, course.gradientColors[0]),
                       if (pdfFile.subject != 'uncategorized')
                         _buildTopicChip(pdfFile.subject, course.gradientColors[1]),
+                      if (pdfFile.hasAccessBadge)
+                        _buildTopicChip(
+                          pdfFile.accessLabel,
+                          pdfFile.isFree ? Colors.green : _premiumGold,
+                        ),
                       _buildTopicChip('PDF', Colors.orange),
                     ],
                   ),
@@ -617,4 +645,36 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
       ),
     );
   }
+
+  Widget _buildAccessBadge(PdfFile file) {
+    final isFree = file.isFree;
+    final premiumGold = const Color(0xFFD2BE72);
+    final premiumBorder = const Color(0xFFE7D79D);
+    final backgroundColor = isFree
+        ? Colors.green.withValues(alpha: 0.18)
+        : premiumGold;
+    final borderColor = isFree
+        ? Colors.green.withValues(alpha: 0.35)
+        : premiumBorder;
+    final textColor = Colors.white;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: borderColor),
+      ),
+      child: Text(
+        file.accessLabel,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
 }
+

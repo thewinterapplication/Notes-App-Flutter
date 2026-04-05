@@ -43,7 +43,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
     await ref.read(authProvider.notifier).loadFromPrefs();
 
     // Wait for animation to complete
-    await Future.delayed(const Duration(milliseconds: 3000));
+    await Future.delayed(const Duration(milliseconds: 1500));
 
     if (!mounted) return;
 

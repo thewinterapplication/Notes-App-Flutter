@@ -1,6 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/course.dart';
 import '../models/pdf_file.dart';
 import '../services/api_service.dart';
+
+/// Provider for fetching available courses from mappings
+final availableCoursesProvider = FutureProvider<List<Course>>((ref) async {
+  final result = await ApiService.getAvailableCourses();
+
+  if (result['success'] == true) {
+    return result['courses'] as List<Course>;
+  } else {
+    throw Exception(result['message'] ?? 'Failed to fetch courses');
+  }
+});
 
 /// Provider for fetching PDF files by course (legacy)
 final pdfFilesProvider = FutureProvider.family<List<PdfFile>, String>((ref, subject) async {

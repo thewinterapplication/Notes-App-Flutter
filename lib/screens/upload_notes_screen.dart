@@ -17,17 +17,53 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
   String? _selectedCourse;
   String? _selectedSubject;
   final TextEditingController _customFileNameController = TextEditingController();
+  final TextEditingController _authorNameController = TextEditingController();
   final TextEditingController _newSubjectController = TextEditingController();
+  String _selectedAccessType = 'free';
 
   bool _isLoading = false;
+  bool _isLoadingCourses = true;
   bool _isLoadingSubjects = false;
+  List<Course> _courses = [];
   List<String> _subjects = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCourses();
+  }
 
   @override
   void dispose() {
     _customFileNameController.dispose();
+    _authorNameController.dispose();
     _newSubjectController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadCourses() async {
+    setState(() {
+      _isLoadingCourses = true;
+    });
+
+    final result = await ApiService.getAvailableCourses();
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingCourses = false;
+      if (result['success'] == true) {
+        _courses = List<Course>.from(result['courses'] ?? []);
+        if (_selectedCourse != null &&
+            !_courses.any((course) => course.abbreviation == _selectedCourse)) {
+          _selectedCourse = null;
+          _selectedSubject = null;
+          _subjects = [];
+        }
+      } else {
+        _courses = [];
+      }
+    });
   }
 
   Future<void> _pickFile() async {
@@ -126,6 +162,10 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
       _showSnackBar('Please select or add a subject', isError: true);
       return;
     }
+    if (_authorNameController.text.trim().isEmpty) {
+      _showSnackBar('Please enter the author name', isError: true);
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -133,7 +173,9 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
       file: _selectedFile!,
       course: _selectedCourse!,
       subject: _selectedSubject!,
+      author: _authorNameController.text.trim(),
       customFileName: _customFileNameController.text.trim(),
+      accessType: _selectedAccessType,
     );
 
     setState(() => _isLoading = false);
@@ -259,6 +301,48 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
 
             const SizedBox(height: 16),
 
+            _buildSectionCard(
+              title: 'Author Name',
+              child: TextField(
+                controller: _authorNameController,
+                textCapitalization: TextCapitalization.words,
+                decoration: InputDecoration(
+                  hintText: 'Enter author name',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            _buildSectionCard(
+              title: 'Access Type',
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildAccessTypeOption(
+                      value: 'free',
+                      title: 'Free',
+                      subtitle: 'Anyone can open this note',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildAccessTypeOption(
+                      value: 'premium',
+                      title: 'Premium',
+                      subtitle: 'Only subscribed users can open it',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
             // Course Selection
             _buildSectionCard(
               title: 'Select Course',
@@ -270,15 +354,23 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
                   ),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
-                hint: const Text('Choose a course'),
+                hint: Text(
+                  _isLoadingCourses
+                      ? 'Loading courses...'
+                      : _courses.isEmpty
+                          ? 'No courses available'
+                          : 'Choose a course',
+                ),
                 isExpanded: true,
-                items: Course.allCourses.map((course) {
+                items: _courses.map((course) {
                   return DropdownMenuItem(
                     value: course.abbreviation,
                     child: Text(course.abbreviation),
                   );
                 }).toList(),
-                onChanged: (value) {
+                onChanged: _isLoadingCourses || _courses.isEmpty
+                    ? null
+                    : (value) {
                   setState(() {
                     _selectedCourse = value;
                   });
@@ -428,6 +520,70 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
           const SizedBox(height: 12),
           child,
         ],
+      ),
+    );
+  }
+
+  Widget _buildAccessTypeOption({
+    required String value,
+    required String title,
+    required String subtitle,
+  }) {
+    final isSelected = _selectedAccessType == value;
+
+    return InkWell(
+      onTap: () => setState(() => _selectedAccessType = value),
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (value == 'free' ? Colors.green.shade50 : Colors.orange.shade50)
+              : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected
+                ? (value == 'free' ? Colors.green.shade400 : Colors.orange.shade400)
+                : Colors.grey.shade300,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  value == 'free' ? Icons.lock_open_rounded : Icons.workspace_premium_rounded,
+                  size: 18,
+                  color: isSelected
+                      ? (value == 'free' ? Colors.green.shade700 : Colors.orange.shade700)
+                      : Colors.grey.shade600,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected ? const Color(0xFF2D3E50) : Colors.black87,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                height: 1.3,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

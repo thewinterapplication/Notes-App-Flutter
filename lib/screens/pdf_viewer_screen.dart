@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdfx/pdfx.dart';
 import 'package:screen_protector/screen_protector.dart';
+import '../services/review_service.dart';
 
 /// Fullscreen PDF Viewer - simple page view with zoom and thumbnail navigation
 class PdfViewerScreen extends StatefulWidget {
@@ -22,6 +24,8 @@ class PdfViewerScreen extends StatefulWidget {
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   static const bool enableScreenshotProtection = true;
+  static const int _pagePreloadRadius = 1;
+  static const int _pageCacheRadius = 2;
 
   int _currentPage = 1;
   int _totalPages = 0;
@@ -33,6 +37,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
   // Async lock to serialize getPage() calls — prevents concurrent native access
   Completer<void>? _renderLock;
+  Future<Uint8List>? _pdfBytesFuture;
+  int _preloadGeneration = 0;
 
   // Track zoom/pinch state to disable PageView swiping
   bool _isZoomedIn = false;
@@ -53,8 +59,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     _pageController = PageController();
     _transformationController.addListener(_onZoomChanged);
     _loadDocument();
-    _scrollDocumentFuture = _loadScrollDocument();
-    _scrollController = PdfControllerPinch(document: _scrollDocumentFuture!);
+    ReviewService.trackViewAndMaybeRequestReview();
   }
 
   Future<void> _enableSecureMode() async {
@@ -70,14 +75,15 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 
   Map<String, String> get _requestHeaders => {
-        'X-User-Phone': widget.userPhone.trim(),
+        if (widget.userPhone.trim().isNotEmpty)
+          'X-User-Phone': widget.userPhone.trim(),
       };
 
-  Future<Uint8List> _readPdfBytes() async {
-    if (widget.userPhone.trim().isEmpty) {
-      throw Exception('Login and an active subscription are required to open this PDF.');
-    }
+  Future<Uint8List> _getPdfBytes() {
+    return _pdfBytesFuture ??= _readPdfBytes();
+  }
 
+  Future<Uint8List> _readPdfBytes() async {
     return http.readBytes(
       Uri.parse(widget.pdfUrl),
       headers: _requestHeaders,
@@ -87,12 +93,14 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   String _formatLoadError(Object error) {
     final message = error.toString();
 
-    if (widget.userPhone.trim().isEmpty || message.contains('401')) {
-      return 'Please login again to open this PDF.';
+    if (message.contains('401')) {
+      return widget.userPhone.trim().isEmpty
+          ? 'Please login to open this premium PDF.'
+          : 'Please login again to open this PDF.';
     }
 
     if (message.contains('403')) {
-      return 'An active subscription is required to open this PDF.';
+      return 'An active subscription is required to open this premium PDF.';
     }
 
     return 'Unable to load this PDF right now.';
@@ -109,13 +117,13 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 
   Future<PdfDocument> _loadScrollDocument() async {
-    final bytes = await _readPdfBytes();
+    final bytes = await _getPdfBytes();
     return await PdfDocument.openData(bytes);
   }
 
   Future<void> _loadDocument() async {
     try {
-      final bytes = await _readPdfBytes();
+      final bytes = await _getPdfBytes();
       final doc = await PdfDocument.openData(bytes);
       _loadedDocument = doc;
       if (mounted) {
@@ -178,16 +186,61 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 
   void _preloadAdjacentPages(int currentPage) {
-    // Load current page first, then adjacent pages sequentially
-    _ensurePageLoaded(currentPage).then((_) {
-      for (int i = 1; i <= 2; i++) {
-        if (currentPage + i <= _totalPages) {
-          _ensurePageLoaded(currentPage + i);
-        }
-        if (currentPage - i >= 1) {
-          _ensurePageLoaded(currentPage - i);
-        }
+    final generation = ++_preloadGeneration;
+    final pagesToLoad = <int>[currentPage];
+
+    for (int i = 1; i <= _pagePreloadRadius; i++) {
+      final nextPage = currentPage + i;
+      if (nextPage <= _totalPages) {
+        pagesToLoad.add(nextPage);
       }
+
+      final previousPage = currentPage - i;
+      if (previousPage >= 1) {
+        pagesToLoad.add(previousPage);
+      }
+    }
+
+    _trimPageCache(currentPage);
+    unawaited(_preloadPageWindow(pagesToLoad, currentPage, generation));
+  }
+
+  Future<void> _preloadPageWindow(
+    List<int> pagesToLoad,
+    int anchorPage,
+    int generation,
+  ) async {
+    for (final pageNumber in pagesToLoad) {
+      if (!mounted || generation != _preloadGeneration) {
+        return;
+      }
+      await _ensurePageLoaded(pageNumber);
+    }
+
+    if (mounted && generation == _preloadGeneration) {
+      _trimPageCache(anchorPage);
+    }
+  }
+
+  void _trimPageCache(int anchorPage) {
+    final minPage = math.max(1, anchorPage - _pageCacheRadius);
+    final maxPage = math.min(_totalPages, anchorPage + _pageCacheRadius);
+    final pagesToRemove = _pageCache.keys
+        .where((page) => page < minPage || page > maxPage)
+        .toList();
+
+    for (final page in pagesToRemove) {
+      _pageCache.remove(page);
+    }
+  }
+
+  void _toggleScrollMode() {
+    setState(() {
+      if (!_scrollMode && _scrollDocumentFuture == null) {
+        _scrollDocumentFuture = _loadScrollDocument();
+        _scrollController = PdfControllerPinch(document: _scrollDocumentFuture!);
+      }
+      _scrollMode = !_scrollMode;
     });
   }
 
@@ -462,11 +515,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                 right: 16,
                 top: 16,
                 child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _scrollMode = !_scrollMode;
-                    });
-                  },
+                  onTap: _toggleScrollMode,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 10),

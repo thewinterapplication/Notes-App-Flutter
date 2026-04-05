@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+import '../models/course.dart';
 import '../models/pdf_file.dart';
 import '../models/subscription_checkout_session.dart';
 import '../models/subscription_plan.dart';
@@ -10,8 +11,8 @@ import '../models/subscription_plan.dart';
 /// API Service to connect to server
 class ApiService {
   // Single source of truth - use machine IP for all platforms
-  static const String baseUrl = 'https://notes-app-server-wczw.onrender.com';
-  // static const String baseUrl = 'http://10.142.181.35 `:3000';
+  // static const String baseUrl = 'https://notes-app-server-wczw.onrender.com';
+  static const String baseUrl = 'http://192.168.1.4:3000';
 
   // Retry configuration for Render.com free tier (server may be sleeping)
   static const int maxRetries = 3;
@@ -236,6 +237,45 @@ class ApiService {
         return {'success': true, 'subjects': subjects};
       } else {
         return {'success': false, 'message': 'Failed to fetch subjects'};
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Server is starting up. Please wait and try again.',
+      };
+    }
+  }
+
+  /// Fetch courses from mappings and keep only courses with at least one subject
+  static Future<Map<String, dynamic>> getAvailableCourses() async {
+    try {
+      final response = await _getWithRetry('$baseUrl/api/mappings');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final mappings =
+            (data['mappings'] as List? ?? const [])
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList();
+
+        final courses =
+            mappings
+                .where(
+                  (mapping) =>
+                      (mapping['subjects'] as List? ?? const []).isNotEmpty,
+                )
+                .map(
+                  (mapping) => Course.fromAbbreviation(
+                    (mapping['course'] as String? ?? '').trim(),
+                  ),
+                )
+                .where((course) => course.abbreviation.isNotEmpty)
+                .toList();
+
+        return {'success': true, 'courses': courses};
+      } else {
+        return {'success': false, 'message': 'Failed to fetch courses'};
       }
     } catch (e) {
       return {
@@ -680,7 +720,9 @@ class ApiService {
     required File file,
     required String course,
     required String subject,
+    required String author,
     String? customFileName,
+    String accessType = 'free',
   }) async {
     try {
       final uri = Uri.parse('$baseUrl/upload');
@@ -700,6 +742,8 @@ class ApiService {
       // Add form fields
       request.fields['course'] = course;
       request.fields['subject'] = subject;
+      request.fields['author'] = author.trim();
+      request.fields['accessType'] = accessType;
       if (customFileName != null && customFileName.isNotEmpty) {
         request.fields['customFileName'] = customFileName;
       }

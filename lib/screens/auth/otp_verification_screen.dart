@@ -119,12 +119,12 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
               MaterialPageRoute(builder: (context) => const HomeScreen()),
               (route) => false,
             );
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Login successful!'),
-                backgroundColor: Color(0xFF4CAF50),
-              ),
-            );
+            // ScaffoldMessenger.of(context).showSnackBar(
+            //   const SnackBar(
+            //     content: Text('Login successful!'),
+            //     backgroundColor: Color(0xFF4CAF50),
+            //   ),
+            // );
           }
         } else {
           ScaffoldMessenger.of(context).showSnackBar(

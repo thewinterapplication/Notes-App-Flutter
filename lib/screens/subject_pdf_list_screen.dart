@@ -285,13 +285,6 @@ class _SubjectPdfListScreenState extends ConsumerState<SubjectPdfListScreen> {
     );
   }
 
-  String _stripExtension(String fileName) {
-    if (fileName.toLowerCase().endsWith('.pdf')) {
-      return fileName.substring(0, fileName.length - 4);
-    }
-    return fileName;
-  }
-
   Widget _buildFileCard(BuildContext context, PdfFile file, int index) {
     final tileColor = course.gradientColors[0].withOpacity(0.06 + (index % 3) * 0.03);
     return GestureDetector(
@@ -325,24 +318,38 @@ class _SubjectPdfListScreenState extends ConsumerState<SubjectPdfListScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    _stripExtension(file.fileName),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF212121),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          file.displayTitle,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF212121),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (!isPlacement && !isPYQ && file.isFree) ...[
+                        const SizedBox(width: 10),
+                        _buildAccessBadge(file),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Row(
                     children: [
                       Icon(Icons.person_outline, size: 14, color: course.gradientColors[0]),
                       const SizedBox(width: 4),
-                      Text(
-                        'Author',
-                        style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                      Expanded(
+                        child: Text(
+                          file.displayAuthor,
+                          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
@@ -369,6 +376,31 @@ class _SubjectPdfListScreenState extends ConsumerState<SubjectPdfListScreen> {
             ),
             Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey.shade400),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccessBadge(PdfFile file) {
+    final isFree = file.isFree;
+    final backgroundColor = isFree ? Colors.green.shade50 : Colors.orange.shade50;
+    final borderColor = isFree ? Colors.green.shade200 : Colors.orange.shade200;
+    final textColor = isFree ? Colors.green.shade700 : Colors.orange.shade700;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: borderColor),
+      ),
+      child: Text(
+        file.accessLabel,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: textColor,
+          letterSpacing: 0.4,
         ),
       ),
     );

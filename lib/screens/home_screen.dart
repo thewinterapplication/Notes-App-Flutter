@@ -5,6 +5,7 @@ import '../models/course.dart';
 import '../models/placement_category.dart';
 import '../constants/app_constants.dart';
 import '../providers/auth_provider.dart';
+import '../providers/pdf_provider.dart';
 import '../widgets/subscription_banner.dart';
 import 'course_subjects_screen.dart';
 import 'bookmarks_screen.dart';
@@ -27,8 +28,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       TextEditingController();
   int _currentNavIndex = 0;
   String _coursesSearchQuery = '';
-
-  List<Course> get courses => Course.allCourses;
 
   @override
   void dispose() {
@@ -73,6 +72,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
+    final coursesAsync = ref.watch(availableCoursesProvider);
     final userName = authState.userName.isNotEmpty
         ? authState.userName
         : 'Guest';
@@ -83,9 +83,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       drawer: _buildDrawer(context, authState),
       body: SafeArea(
         child: _currentNavIndex == 0
-            ? _buildHomeBody(context, userName)
+            ? _buildHomeBody(context, userName, coursesAsync)
             : _currentNavIndex == 1
-            ? _buildCoursesTab()
+            ? _buildCoursesTab(coursesAsync: coursesAsync)
             : _currentNavIndex == 2
             ? _buildPlacementsTab()
             : const BookmarksScreen(),
@@ -94,7 +94,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildHomeBody(BuildContext context, String userName) {
+  Widget _buildHomeBody(
+    BuildContext context,
+    String userName,
+    AsyncValue<List<Course>> coursesAsync,
+  ) {
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -211,23 +215,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           // Notes Section
           _buildSectionHeader(
             'Notes',
-            onSeeAll: () {
-              // Could navigate to a full list
-            },
+            onSeeAll: () => setState(() => _currentNavIndex = 1),
           ),
           const SizedBox(height: 12),
           SizedBox(
             height: 160,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: courses.length,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: _buildHorizontalCourseCard(courses[index]),
-                );
-              },
+            child: coursesAsync.when(
+              data: (courses) => courses.isEmpty
+                  ? _buildEmptyCoursesPlaceholder(
+                      'No courses available right now',
+                    )
+                  : ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: courses.length,
+                      itemBuilder: (context, index) {
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: _buildHorizontalCourseCard(courses[index]),
+                        );
+                      },
+                    ),
+              loading: () => _buildSkeletonCards(),
+              error: (_, __) => _buildEmptyCoursesPlaceholder(
+                'Unable to load courses',
+              ),
             ),
           ),
 
@@ -381,6 +393,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  Widget _buildSkeletonCards() {
+    return ListView.builder(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: 4,
+      itemBuilder: (context, index) {
+        return Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: _SkeletonCard(width: 140, height: 160),
+        );
+      },
+    );
+  }
+
+  Widget _buildSkeletonGrid() {
+    return GridView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 1.1,
+      ),
+      itemCount: 6,
+      itemBuilder: (context, index) {
+        return _SkeletonCard(width: double.infinity, height: double.infinity);
+      },
+    );
+  }
+
   Widget _buildPlacementCategoryCard(PlacementCategory category) {
     return GestureDetector(
       onTap: () {
@@ -463,6 +505,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _showSearchBottomSheet(BuildContext context) {
     String searchQuery = '';
+    final availableCourses = ref.read(availableCoursesProvider).maybeWhen(
+          data: (courses) => courses,
+          orElse: () => Course.allCourses,
+        );
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -470,7 +516,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            final filtered = courses
+            final filtered = availableCourses
                 .where(
                   (c) =>
                       c.fullName.toLowerCase().contains(
@@ -592,10 +638,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildCoursesTab({bool isPYQ = false, bool isPlacement = false}) {
-    final filtered = _coursesSearchQuery.isEmpty
-        ? courses
-        : courses
+  Widget _buildCoursesTab({
+    bool isPYQ = false,
+    bool isPlacement = false,
+    required AsyncValue<List<Course>> coursesAsync,
+  }) {
+    final filteredCourses = coursesAsync.whenData(
+      (courses) => _coursesSearchQuery.isEmpty
+          ? courses
+          : courses
               .where(
                 (c) =>
                     c.fullName.toLowerCase().contains(
@@ -605,7 +656,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       _coursesSearchQuery.toLowerCase(),
                     ),
               )
-              .toList();
+              .toList(),
+    );
 
     return Container(
       color: const Color(0xFFF5F5F5),
@@ -732,30 +784,42 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           // Course list
           Expanded(
-            child: filtered.isEmpty
-                ? Center(
-                    child: Text(
-                      'No courses found',
-                      style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 16,
-                      ),
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _buildVerticalCourseCard(
-                          filtered[index],
-                          isPYQ: isPYQ,
-                          isPlacement: isPlacement,
+            child: filteredCourses.when(
+              data: (courses) => courses.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No courses found',
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 16,
                         ),
-                      );
-                    },
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      itemCount: courses.length,
+                      itemBuilder: (context, index) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _buildVerticalCourseCard(
+                            courses[index],
+                            isPYQ: isPYQ,
+                            isPlacement: isPlacement,
+                          ),
+                        );
+                      },
+                    ),
+              loading: () => _buildSkeletonGrid(),
+              error: (_, __) => Center(
+                child: Text(
+                  'Unable to load courses',
+                  style: TextStyle(
+                    color: Colors.grey.shade500,
+                    fontSize: 16,
                   ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -1064,6 +1128,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyCoursesPlaceholder(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.grey.shade500,
+            fontSize: 15,
+          ),
         ),
       ),
     );
@@ -1394,6 +1474,97 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SkeletonCard extends StatefulWidget {
+  final double width;
+  final double height;
+
+  const _SkeletonCard({required this.width, required this.height});
+
+  @override
+  State<_SkeletonCard> createState() => _SkeletonCardState();
+}
+
+class _SkeletonCardState extends State<_SkeletonCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+    _animation = Tween<double>(begin: -1.0, end: 2.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    _controller.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: widget.width,
+      height: widget.height,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        gradient: LinearGradient(
+          begin: Alignment(_animation.value - 1, 0),
+          end: Alignment(_animation.value, 0),
+          colors: const [
+            Color(0xFFE0E0E0),
+            Color(0xFFF0F0F0),
+            Color(0xFFE0E0E0),
+          ],
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            const Spacer(),
+            Container(
+              width: 70,
+              height: 14,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              width: 50,
+              height: 10,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ],
         ),
       ),
     );

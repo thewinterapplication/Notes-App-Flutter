@@ -53,4 +53,25 @@ class Course {
       gradientColors: [Color(0xFF7B1FA2), Color(0xFF4A148C)],
     ),
   ];
+
+  static final Map<String, Course> _courseByAbbreviation = {
+    for (final course in allCourses) course.abbreviation.toLowerCase(): course,
+  };
+
+  static Course fromAbbreviation(String abbreviation, {String? fullName}) {
+    final trimmedAbbreviation = abbreviation.trim();
+    final existingCourse =
+        _courseByAbbreviation[trimmedAbbreviation.toLowerCase()];
+    if (existingCourse != null) {
+      return existingCourse;
+    }
+
+    return Course(
+      id: trimmedAbbreviation.toLowerCase().hashCode,
+      abbreviation: trimmedAbbreviation,
+      fullName: fullName ?? trimmedAbbreviation,
+      icon: Icons.school,
+      gradientColors: const [Color(0xFF455A64), Color(0xFF263238)],
+    );
+  }
 }

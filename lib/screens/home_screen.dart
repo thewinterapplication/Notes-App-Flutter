@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/course.dart';
-import '../models/placement_category.dart';
 import '../constants/app_constants.dart';
 import '../providers/auth_provider.dart';
 import '../providers/pdf_provider.dart';
 import '../widgets/subscription_banner.dart';
 import 'course_subjects_screen.dart';
 import 'bookmarks_screen.dart';
-import 'placement_category_files_screen.dart';
 import 'splash_screen.dart';
 import 'subscription_screen.dart';
 import 'upload_notes_screen.dart';
+import 'jobs_screen.dart';
+import 'upskill_screen.dart';
 
 /// Home Screen with new wireframe-based design
 class HomeScreen extends ConsumerStatefulWidget {
@@ -87,8 +87,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             : _currentNavIndex == 1
             ? _buildCoursesTab(coursesAsync: coursesAsync)
             : _currentNavIndex == 2
-            ? _buildPlacementsTab()
-            : const BookmarksScreen(),
+            ? _buildCoursesTab(
+                isPlacement: true,
+                coursesAsync: ref.watch(availablePlacementCoursesProvider),
+              )
+            : _currentNavIndex == 3
+            ? const JobsScreen()
+            : const UpskillScreen(),
       ),
       bottomNavigationBar: _buildBottomNavBar(),
     );
@@ -245,32 +250,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
           const SizedBox(height: 24),
 
-          // Placements Section
-          _buildSectionHeader(
-            'Placements',
-            onSeeAll: () {
-              setState(() => _currentNavIndex = 2);
-            },
+          // Placements Section — only shown when courses are available
+          ...ref.watch(availablePlacementCoursesProvider).maybeWhen(
+            data: (placementCourses) => placementCourses.isEmpty
+                ? []
+                : [
+                    _buildSectionHeader(
+                      'Placements',
+                      onSeeAll: () => setState(() => _currentNavIndex = 2),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 160,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: placementCourses.length,
+                        itemBuilder: (context, index) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: _buildHorizontalCourseCard(
+                              placementCourses[index],
+                              isPlacement: true,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+            orElse: () => [],
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 160,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: PlacementCategory.allCategories.length,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: _buildPlacementCategoryCard(
-                    PlacementCategory.allCategories[index],
-                  ),
-                );
-              },
-            ),
-          ),
-
-          const SizedBox(height: 24),
         ],
       ),
     );
@@ -307,14 +317,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildHorizontalCourseCard(Course course, {bool isPYQ = false}) {
+  Widget _buildHorizontalCourseCard(Course course, {bool isPYQ = false, bool isPlacement = false}) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) =>
-                CourseSubjectsScreen(course: course, isPYQ: isPYQ),
+            builder: (context) => CourseSubjectsScreen(
+              course: course,
+              isPYQ: isPYQ,
+              isPlacement: isPlacement,
+            ),
           ),
         );
       },
@@ -420,86 +433,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       itemBuilder: (context, index) {
         return _SkeletonCard(width: double.infinity, height: double.infinity);
       },
-    );
-  }
-
-  Widget _buildPlacementCategoryCard(PlacementCategory category) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) =>
-                PlacementCategoryFilesScreen(category: category),
-          ),
-        );
-      },
-      child: Container(
-        width: 140,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          gradient: LinearGradient(
-            colors: category.gradientColors,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: category.gradientColors[0].withOpacity(0.35),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -10,
-              bottom: -10,
-              child: Icon(
-                category.icon,
-                size: 80,
-                color: Colors.white.withOpacity(0.15),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(category.icon, color: Colors.white, size: 24),
-                  ),
-                  const Spacer(),
-                  Text(
-                    category.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    category.subtitle,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
-                      fontSize: 11,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -826,236 +759,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildPlacementsTab() {
-    final categories = PlacementCategory.allCategories;
-    final filtered = _coursesSearchQuery.isEmpty
-        ? categories
-        : categories
-              .where(
-                (c) =>
-                    c.name.toLowerCase().contains(
-                      _coursesSearchQuery.toLowerCase(),
-                    ) ||
-                    c.subtitle.toLowerCase().contains(
-                      _coursesSearchQuery.toLowerCase(),
-                    ),
-              )
-              .toList();
-
-    return Container(
-      color: const Color(0xFFF5F5F5),
-      child: Column(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF2D3E50), Color(0xFF3D5266)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(24),
-                bottomRight: Radius.circular(24),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF2D3E50).withOpacity(0.3),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Placements',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Placement preparation materials',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: TextField(
-                    controller: _coursesSearchController,
-                    onChanged: (value) =>
-                        setState(() => _coursesSearchQuery = value),
-                    style: const TextStyle(fontSize: 15),
-                    decoration: InputDecoration(
-                      hintText: 'Search categories...',
-                      hintStyle: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 15,
-                      ),
-                      prefixIcon: const Padding(
-                        padding: EdgeInsets.only(left: 16, right: 8),
-                        child: Icon(
-                          Icons.search_rounded,
-                          color: Color(0xFF2D3E50),
-                          size: 22,
-                        ),
-                      ),
-                      prefixIconConstraints: const BoxConstraints(minWidth: 46),
-                      suffixIcon: _coursesSearchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: Icon(
-                                Icons.clear_rounded,
-                                color: Colors.grey.shade400,
-                                size: 20,
-                              ),
-                              onPressed: () {
-                                _coursesSearchController.clear();
-                                setState(() => _coursesSearchQuery = '');
-                              },
-                            )
-                          : null,
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 0,
-                        vertical: 14,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: filtered.isEmpty
-                ? Center(
-                    child: Text(
-                      'No categories found',
-                      style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 16,
-                      ),
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _buildVerticalPlacementCard(filtered[index]),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVerticalPlacementCard(PlacementCategory category) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) =>
-                PlacementCategoryFilesScreen(category: category),
-          ),
-        );
-      },
-      child: Container(
-        height: 140,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          gradient: LinearGradient(
-            colors: category.gradientColors,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: category.gradientColors[0].withOpacity(0.4),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -10,
-              top: 0,
-              bottom: 0,
-              child: Center(
-                child: Icon(
-                  category.icon,
-                  size: 120,
-                  color: Colors.white.withOpacity(0.15),
-                ),
-              ),
-            ),
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(category.icon, color: Colors.white, size: 32),
-                  const SizedBox(height: 8),
-                  Text(
-                    category.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    category.subtitle,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildVerticalCourseCard(
     Course course, {
     bool isPYQ = false,
@@ -1170,7 +873,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               _buildNavItem(Icons.home_rounded, 'Home', 0),
               _buildNavItem(Icons.school_rounded, 'Courses', 1),
               _buildNavItem(Icons.work_rounded, 'Placements', 2),
-              _buildNavItem(Icons.bookmark_rounded, 'Saved', 3),
+              _buildNavItem(Icons.business_center_rounded, 'Jobs', 3),
+              _buildNavItem(Icons.trending_up_rounded, 'Upskill', 4),
             ],
           ),
         ),
@@ -1185,7 +889,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         setState(() => _currentNavIndex = index);
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected
               ? const Color(0xFF2D3E50).withOpacity(0.1)
@@ -1315,7 +1019,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 8),
                   _buildDrawerItem(
                     Icons.bookmark_rounded,
-                    'Bookmarks',
+                    'Saved',
                     const Color(0xFFFF9800),
                     () {
                       Navigator.pop(context);

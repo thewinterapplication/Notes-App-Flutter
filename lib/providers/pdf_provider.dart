@@ -66,6 +66,17 @@ final pdfFilesByCourseSubjectProvider = FutureProvider.family<List<PdfFile>, Cou
   }
 });
 
+/// Provider for fetching available placement courses from placement-mappings
+final availablePlacementCoursesProvider = FutureProvider<List<Course>>((ref) async {
+  final result = await ApiService.getAvailablePlacementCourses();
+
+  if (result['success'] == true) {
+    return result['courses'] as List<Course>;
+  } else {
+    throw Exception(result['message'] ?? 'Failed to fetch placement courses');
+  }
+});
+
 /// Provider for fetching placement subjects by course
 final placementSubjectsProvider = FutureProvider.family<List<String>, String>((ref, course) async {
   final result = await ApiService.getPlacementSubjectsByCourse(course);

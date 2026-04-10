@@ -12,7 +12,9 @@ import '../models/subscription_plan.dart';
 class ApiService {
   // Single source of truth - use machine IP for all platforms
   // static const String baseUrl = 'https://notes-app-server-wczw.onrender.com';
-  static const String baseUrl = 'http://192.168.1.4:3000';
+  // static const String baseUrl = 'http://192.168.1.4:3000';
+  static const String baseUrl = 'https://notes.codebinary.in';
+
 
   // Retry configuration for Render.com free tier (server may be sleeping)
   static const int maxRetries = 3;
@@ -303,6 +305,45 @@ class ApiService {
         return {'success': true, 'files': files};
       } else {
         return {'success': false, 'message': 'Failed to fetch files'};
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Server is starting up. Please wait and try again.',
+      };
+    }
+  }
+
+  /// Fetch courses from placement-mappings and keep only courses with at least one subject
+  static Future<Map<String, dynamic>> getAvailablePlacementCourses() async {
+    try {
+      final response = await _getWithRetry('$baseUrl/api/placement-mappings');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final mappings =
+            (data['mappings'] as List? ?? const [])
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList();
+
+        final courses =
+            mappings
+                .where(
+                  (mapping) =>
+                      (mapping['subjects'] as List? ?? const []).isNotEmpty,
+                )
+                .map(
+                  (mapping) => Course.fromAbbreviation(
+                    (mapping['course'] as String? ?? '').trim(),
+                  ),
+                )
+                .where((course) => course.abbreviation.isNotEmpty)
+                .toList();
+
+        return {'success': true, 'courses': courses};
+      } else {
+        return {'success': false, 'message': 'Failed to fetch placement courses'};
       }
     } catch (e) {
       return {

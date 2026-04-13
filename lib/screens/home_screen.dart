@@ -318,6 +318,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildHorizontalCourseCard(Course course, {bool isPYQ = false, bool isPlacement = false}) {
+    final tabGradientColors = course.gradientColors.reversed.toList();
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -336,13 +337,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           gradient: LinearGradient(
-            colors: course.gradientColors,
+            colors: tabGradientColors,
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           boxShadow: [
             BoxShadow(
-              color: course.gradientColors[0].withOpacity(0.35),
+              color: tabGradientColors[0].withOpacity(0.35),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -502,12 +503,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       itemCount: filtered.length,
                       itemBuilder: (context, index) {
                         final course = filtered[index];
+                        final tabGradientColors =
+                            course.gradientColors.reversed.toList();
                         return ListTile(
                           leading: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: course.gradientColors,
+                                colors: tabGradientColors,
                               ),
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -764,6 +767,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     bool isPYQ = false,
     bool isPlacement = false,
   }) {
+    final tabGradientColors = course.gradientColors.reversed.toList();
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -782,13 +786,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           gradient: LinearGradient(
-            colors: course.gradientColors,
+            colors: tabGradientColors,
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           boxShadow: [
             BoxShadow(
-              color: course.gradientColors[0].withOpacity(0.4),
+              color: tabGradientColors[0].withOpacity(0.4),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),

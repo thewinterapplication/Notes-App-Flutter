@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import '../models/course.dart';
@@ -260,20 +261,37 @@ class ApiService {
                 .whereType<Map>()
                 .map((item) => Map<String, dynamic>.from(item))
                 .toList();
-
-        final courses =
+        const courseGradientLoop = <List<Color>>[
+          [Color(0xFF00838F), Color(0xFF006064)],
+          [Color(0xFF1976D2), Color(0xFF0D47A1)],
+          [Color(0xFF7B1FA2), Color(0xFF4A148C)],
+          [Color(0xFFE91E8C), Color(0xFFC2185B)],
+          [Color(0xFFE85D04), Color(0xFFD62828)],
+        ];
+        final filteredMappings =
             mappings
                 .where(
                   (mapping) =>
                       (mapping['subjects'] as List? ?? const []).isNotEmpty,
                 )
-                .map(
-                  (mapping) => Course.fromAbbreviation(
-                    (mapping['course'] as String? ?? '').trim(),
-                  ),
-                )
-                .where((course) => course.abbreviation.isNotEmpty)
                 .toList();
+        final courses =
+            List.generate(filteredMappings.length, (index) {
+              final mapping = filteredMappings[index];
+              final baseCourse = Course.fromAbbreviation(
+                (mapping['course'] as String? ?? '').trim(),
+              );
+              final gradientColors =
+                  courseGradientLoop[index % courseGradientLoop.length];
+
+              return Course(
+                id: baseCourse.id,
+                abbreviation: baseCourse.abbreviation,
+                fullName: baseCourse.fullName,
+                icon: baseCourse.icon,
+                gradientColors: gradientColors,
+              );
+            }).where((course) => course.abbreviation.isNotEmpty).toList();
 
         return {'success': true, 'courses': courses};
       } else {
@@ -326,20 +344,38 @@ class ApiService {
                 .whereType<Map>()
                 .map((item) => Map<String, dynamic>.from(item))
                 .toList();
-
-        final courses =
+        const placementGradientLoop = <List<Color>>[
+          [Color(0xFFE85D04), Color(0xFFD62828)],
+          [Color(0xFFE91E8C), Color(0xFFC2185B)],
+          [Color(0xFF7B1FA2), Color(0xFF4A148C)],
+          [Color(0xFF1976D2), Color(0xFF0D47A1)],
+          [Color(0xFF00838F), Color(0xFF006064)],
+        ];
+        final filteredMappings =
             mappings
                 .where(
                   (mapping) =>
                       (mapping['subjects'] as List? ?? const []).isNotEmpty,
                 )
-                .map(
-                  (mapping) => Course.fromAbbreviation(
-                    (mapping['course'] as String? ?? '').trim(),
-                  ),
-                )
-                .where((course) => course.abbreviation.isNotEmpty)
                 .toList();
+
+        final courses =
+            List.generate(filteredMappings.length, (index) {
+              final mapping = filteredMappings[index];
+              final baseCourse = Course.fromAbbreviation(
+                (mapping['course'] as String? ?? '').trim(),
+              );
+              final gradientColors =
+                  placementGradientLoop[index % placementGradientLoop.length];
+
+              return Course(
+                id: baseCourse.id,
+                abbreviation: baseCourse.abbreviation,
+                fullName: baseCourse.fullName,
+                icon: baseCourse.icon,
+                gradientColors: gradientColors,
+              );
+            }).where((course) => course.abbreviation.isNotEmpty).toList();
 
         return {'success': true, 'courses': courses};
       } else {

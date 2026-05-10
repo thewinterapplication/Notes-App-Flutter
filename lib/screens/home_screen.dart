@@ -1045,31 +1045,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       _openSubscriptionScreen();
                     },
                   ),
-                  const SizedBox(height: 8),
-                  _buildDrawerItem(
-                    Icons.upload_file_rounded,
-                    'Upload Notes',
-                    const Color(0xFF4CAF50),
-                    () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const UploadNotesScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  _buildDrawerItem(
-                    Icons.settings_rounded,
-                    'Settings',
-                    const Color(0xFF9C27B0),
-                    () {
-                      Navigator.pop(context);
-                      _showComingSoonDialog('Settings');
-                    },
-                  ),
+                  // const SizedBox(height: 8),
+                  // _buildDrawerItem(
+                  //   Icons.upload_file_rounded,
+                  //   'Upload Notes',
+                  //   const Color(0xFF4CAF50),
+                  //   () {
+                  //     Navigator.pop(context);
+                  //     Navigator.push(
+                  //       context,
+                  //       MaterialPageRoute(
+                  //         builder: (context) => const UploadNotesScreen(),
+                  //       ),
+                  //     );
+                  //   },
+                  // ),
+                  // const SizedBox(height: 8),
+                  // _buildDrawerItem(
+                  //   Icons.settings_rounded,
+                  //   'Settings',
+                  //   const Color(0xFF9C27B0),
+                  //   () {
+                  //     Navigator.pop(context);
+                  //     _showComingSoonDialog('Settings');
+                  //   },
+                  // ),
                 ],
               ),
             ),

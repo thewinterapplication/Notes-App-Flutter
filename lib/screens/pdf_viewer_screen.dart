@@ -1,20 +1,23 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:pdfx/pdfx.dart';
 import 'package:screen_protector/screen_protector.dart';
+
+import '../models/pdf_file.dart';
+import '../services/pdf_cache_service.dart';
 import '../services/review_service.dart';
 
 /// Fullscreen PDF Viewer - simple page view with zoom and thumbnail navigation
 class PdfViewerScreen extends StatefulWidget {
-  final String pdfUrl;
+  final PdfFile pdfFile;
   final String userPhone;
 
   const PdfViewerScreen({
     super.key,
-    required this.pdfUrl,
+    required this.pdfFile,
     required this.userPhone,
   });
 
@@ -24,33 +27,76 @@ class PdfViewerScreen extends StatefulWidget {
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   static const bool enableScreenshotProtection = true;
-  static const int _pagePreloadRadius = 1;
-  static const int _pageCacheRadius = 2;
+  static const int _pagePreloadRadius = 4;
+  static const int _pageCacheRadius = 6;
 
   int _currentPage = 1;
   int _totalPages = 0;
   bool _documentReady = false;
-  bool _scrollMode = false; // false = page mode, true = scroll mode
+  bool _scrollMode = false;
+  bool _downloadFinished = false;
   String? _errorMessage;
+  String? _localPdfPath;
+  double? _downloadProgress;
   PdfDocument? _loadedDocument;
+  int _documentGeneration = 0;
   final Map<int, PdfPageImage?> _pageCache = {};
 
-  // Async lock to serialize getPage() calls — prevents concurrent native access
+  // Serialize getPage() calls to avoid concurrent native access.
   Completer<void>? _renderLock;
-  Future<Uint8List>? _pdfBytesFuture;
   int _preloadGeneration = 0;
+  final Map<int, Future<PdfPageImage?>> _inFlightPageLoads = {};
+  bool _backgroundDownloadCancelled = false;
+  int _bgDownloadedPages = 0;
+  bool _bgDownloadDone = false;
 
-  // Track zoom/pinch state to disable PageView swiping
   bool _isZoomedIn = false;
   int _pointerCount = 0;
-  final TransformationController _transformationController = TransformationController();
+  final TransformationController _transformationController =
+      TransformationController();
 
   late final PageController _pageController;
   final ScrollController _thumbnailScrollController = ScrollController();
 
-  // Scroll mode controller (separate document instance to avoid concurrency)
   PdfControllerPinch? _scrollController;
   Future<PdfDocument>? _scrollDocumentFuture;
+
+  String _formatLogDetails(Map<String, Object?> details) {
+    return details.entries
+        .where((entry) => entry.value != null)
+        .map((entry) {
+          final value = entry.value;
+          final rendered = value is String ? jsonEncode(value) : value;
+          return '${entry.key}=$rendered';
+        })
+        .join(' ');
+  }
+
+  void _logViewer(String message, [Map<String, Object?> details = const {}]) {
+    final mergedDetails = <String, Object?>{
+      'documentId': widget.pdfFile.id,
+      'fileName': widget.pdfFile.fileName,
+      ...details,
+    };
+    final suffix = _formatLogDetails(mergedDetails);
+    debugPrint('[PDFViewer] $message${suffix.isEmpty ? '' : ' $suffix'}');
+  }
+
+  void _logViewerError(
+    String message,
+    Object error, [
+    Map<String, Object?> details = const {},
+  ]) {
+    final mergedDetails = <String, Object?>{
+      'documentId': widget.pdfFile.id,
+      'fileName': widget.pdfFile.fileName,
+      ...details,
+    };
+    final suffix = _formatLogDetails(mergedDetails);
+    debugPrint(
+      '[PDFViewer] $message${suffix.isEmpty ? '' : ' $suffix'} error=$error',
+    );
+  }
 
   @override
   void initState() {
@@ -74,23 +120,21 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     }
   }
 
-  Map<String, String> get _requestHeaders => {
-        if (widget.userPhone.trim().isNotEmpty)
-          'X-User-Phone': widget.userPhone.trim(),
-      };
-
-  Future<Uint8List> _getPdfBytes() {
-    return _pdfBytesFuture ??= _readPdfBytes();
-  }
-
-  Future<Uint8List> _readPdfBytes() async {
-    return http.readBytes(
-      Uri.parse(widget.pdfUrl),
-      headers: _requestHeaders,
-    );
-  }
-
   String _formatLoadError(Object error) {
+    if (error is PdfDownloadException) {
+      if (error.statusCode == 401) {
+        return widget.userPhone.trim().isEmpty
+            ? 'Please login to open this premium PDF.'
+            : 'Please login again to open this PDF.';
+      }
+
+      if (error.statusCode == 403) {
+        return 'An active subscription is required to open this premium PDF.';
+      }
+
+      return error.message;
+    }
+
     final message = error.toString();
 
     if (message.contains('401')) {
@@ -117,52 +161,208 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 
   Future<PdfDocument> _loadScrollDocument() async {
-    final bytes = await _getPdfBytes();
-    return await PdfDocument.openData(bytes);
+    final localPdfPath = _localPdfPath;
+    if (localPdfPath == null) {
+      throw const PdfDownloadException('Document is still loading.');
+    }
+
+    return await PdfDocument.openFile(localPdfPath);
   }
 
   Future<void> _loadDocument() async {
+    if (widget.pdfFile.pageCount > 0) {
+      _logViewer('load-start-per-page', {
+        'pageCount': widget.pdfFile.pageCount,
+      });
+      setState(() {
+        _totalPages = widget.pdfFile.pageCount;
+        _documentReady = true;
+      });
+      _preloadAdjacentPages(1);
+      unawaited(_backgroundDownloadAllPages(widget.pdfFile.pageCount));
+      return;
+    }
+
     try {
-      final bytes = await _getPdfBytes();
-      final doc = await PdfDocument.openData(bytes);
-      _loadedDocument = doc;
-      if (mounted) {
-        setState(() {
-          _totalPages = doc.pagesCount;
-          _documentReady = true;
-          _errorMessage = null;
+      _logViewer('load-start', {
+        'downloadUrl': widget.pdfFile.downloadUrl,
+        'hasUserPhone': widget.userPhone.trim().isNotEmpty,
+      });
+      final cachedFile = await PdfCacheService.getOrDownloadPdf(
+        pdfFile: widget.pdfFile,
+        userPhone: widget.userPhone,
+        onPartialReady: (partialPath) {
+          if (!mounted || _documentReady) return;
+          _logViewer('partial-file-ready', {'partialPath': partialPath});
+          unawaited(_openDocument(partialPath, isPartial: true));
+        },
+        onProgress: (receivedBytes, totalBytes) {
+          if (!mounted || totalBytes == null || totalBytes <= 0) return;
+          setState(() {
+            _downloadProgress = receivedBytes / totalBytes;
+          });
+        },
+      );
+
+      if (!mounted) {
+        _logViewer('load-unmounted-after-download', {
+          'path': cachedFile.filePath,
+          'fromCache': cachedFile.fromCache,
         });
-        // Preload first page and adjacent
-        _preloadAdjacentPages(1);
+        return;
       }
-    } catch (e) {
-      debugPrint('Error loading document: $e');
-      if (mounted) {
+
+      _logViewer('cache-result', {
+        'path': cachedFile.filePath,
+        'fromCache': cachedFile.fromCache,
+      });
+
+      setState(() {
+        _localPdfPath = cachedFile.filePath;
+        _downloadFinished = true;
+      });
+
+      await _openDocument(cachedFile.filePath);
+    } catch (error) {
+      _logViewerError('load-failed', error);
+      debugPrint('Error loading document: $error');
+      if (mounted && !_documentReady) {
         setState(() {
-          _errorMessage = _formatLoadError(e);
+          _errorMessage = _formatLoadError(error);
         });
       }
     }
   }
 
-  /// Serialized page rendering — only one getPage() call at a time
+  Future<void> _openDocument(String filePath, {bool isPartial = false}) async {
+    final myGeneration = ++_documentGeneration;
+    PdfDocument? doc;
+    try {
+      _logViewer('open-file-start', {
+        'path': filePath,
+        'isPartial': isPartial,
+        'generation': myGeneration,
+        'isMounted': mounted,
+      });
+      doc = await PdfDocument.openFile(filePath);
+      _logViewer('open-file-native-ok', {
+        'path': filePath,
+        'isPartial': isPartial,
+        'generation': myGeneration,
+        'pages': doc.pagesCount,
+        'isMounted': mounted,
+      });
+
+      if (!mounted || myGeneration != _documentGeneration) {
+        _logViewer('open-file-discarded', {
+          'path': filePath,
+          'isPartial': isPartial,
+          'generation': myGeneration,
+          'activeGeneration': _documentGeneration,
+          'isMounted': mounted,
+        });
+        await doc.close();
+        return;
+      }
+
+      final prevDoc = _loadedDocument;
+      setState(() {
+        _loadedDocument = doc;
+        _totalPages = doc!.pagesCount;
+        _documentReady = true;
+        _errorMessage = null;
+        _pageCache.clear();
+      });
+      try {
+        await prevDoc?.close();
+      } catch (_) {}
+      _logViewer('open-file-complete', {
+        'path': filePath,
+        'isPartial': isPartial,
+        'pages': _totalPages,
+        'generation': myGeneration,
+      });
+      _preloadAdjacentPages(_currentPage);
+    } catch (error) {
+      await doc?.close();
+      if (isPartial || !mounted || myGeneration != _documentGeneration) {
+        _logViewerError('open-file-ignored', error, {
+          'path': filePath,
+          'isPartial': isPartial,
+          'generation': myGeneration,
+          'activeGeneration': _documentGeneration,
+        });
+        // Swallow: partial open failures are expected for old non-linearized PDFs;
+        // superseded opens are discarded silently.
+        return;
+      }
+      _logViewerError('open-file-failed', error, {
+        'path': filePath,
+        'isPartial': isPartial,
+        'generation': myGeneration,
+      });
+      if (!_documentReady) {
+        setState(() {
+          _errorMessage = _formatLoadError(error);
+        });
+      }
+    }
+  }
+
+  Future<PdfPageImage?> _loadPageFromBytes(int pageNumber) async {
+    try {
+      final bytes = await PdfCacheService.fetchPage(
+        pdfFile: widget.pdfFile,
+        userPhone: widget.userPhone,
+        pageNumber: pageNumber,
+      );
+      final doc = await PdfDocument.openData(bytes);
+      final page = await doc.getPage(1);
+      final image = await page.render(
+        width: page.width * 2,
+        height: page.height * 2,
+      );
+      await page.close();
+      await doc.close();
+      _pageCache[pageNumber] = image;
+      if (mounted) setState(() {});
+      return image;
+    } catch (error) {
+      _logViewerError('page-load-failed', error, {'page': pageNumber});
+      return null;
+    }
+  }
+
   Future<PdfPageImage?> _ensurePageLoaded(int pageNumber) async {
     if (_pageCache.containsKey(pageNumber)) {
       return _pageCache[pageNumber];
     }
-    if (_loadedDocument == null) return null;
 
-    // Wait for any ongoing render to finish
+    if (widget.pdfFile.pageCount > 0) {
+      final inFlight = _inFlightPageLoads[pageNumber];
+      if (inFlight != null) return inFlight;
+
+      final future = _loadPageFromBytes(pageNumber);
+      _inFlightPageLoads[pageNumber] = future;
+      try {
+        return await future;
+      } finally {
+        _inFlightPageLoads.remove(pageNumber);
+      }
+    }
+
+    if (_loadedDocument == null) {
+      return null;
+    }
+
     while (_renderLock != null) {
       await _renderLock!.future;
     }
 
-    // Double-check cache after waiting
     if (_pageCache.containsKey(pageNumber)) {
       return _pageCache[pageNumber];
     }
 
-    // Acquire lock
     _renderLock = Completer<void>();
     try {
       final page = await _loadedDocument!.getPage(pageNumber);
@@ -172,13 +372,15 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       );
       await page.close();
       _pageCache[pageNumber] = image;
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {});
+      }
       return image;
-    } catch (e) {
-      debugPrint('Error loading page $pageNumber: $e');
+    } catch (error) {
+      _logViewerError('page-load-failed', error, {'page': pageNumber});
+      debugPrint('Error loading page $pageNumber: $error');
       return null;
     } finally {
-      // Release lock
       final lock = _renderLock;
       _renderLock = null;
       lock?.complete();
@@ -210,12 +412,14 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     int anchorPage,
     int generation,
   ) async {
-    for (final pageNumber in pagesToLoad) {
-      if (!mounted || generation != _preloadGeneration) {
-        return;
-      }
-      await _ensurePageLoaded(pageNumber);
-    }
+    if (!mounted || generation != _preloadGeneration) return;
+
+    await Future.wait(
+      pagesToLoad.map((pageNumber) async {
+        if (!mounted || generation != _preloadGeneration) return;
+        await _ensurePageLoaded(pageNumber);
+      }),
+    );
 
     if (mounted && generation == _preloadGeneration) {
       _trimPageCache(anchorPage);
@@ -238,7 +442,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     setState(() {
       if (!_scrollMode && _scrollDocumentFuture == null) {
         _scrollDocumentFuture = _loadScrollDocument();
-        _scrollController = PdfControllerPinch(document: _scrollDocumentFuture!);
+        _scrollController = PdfControllerPinch(
+          document: _scrollDocumentFuture!,
+        );
       }
       _scrollMode = !_scrollMode;
     });
@@ -253,10 +459,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       child: Container(
         color: Colors.white,
         alignment: Alignment.center,
-        child: Image.memory(
-          image.bytes,
-          fit: BoxFit.contain,
-        ),
+        child: Image.memory(image.bytes, fit: BoxFit.contain),
       ),
     );
   }
@@ -267,7 +470,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       return _buildZoomableImage(cachedImage!);
     }
 
-    // Page not cached yet — load it
     return FutureBuilder<PdfPageImage?>(
       future: _ensurePageLoaded(pageNumber),
       builder: (context, snapshot) {
@@ -275,17 +477,12 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
             snapshot.data?.bytes != null) {
           return _buildZoomableImage(snapshot.data!);
         }
-        return Container(
-          color: Colors.white,
-          child: const Center(
-            child: CircularProgressIndicator(),
-          ),
-        );
+
+        return const _PdfLoadingView();
       },
     );
   }
 
-  /// Build thumbnail using cached page image — no independent getPage() calls
   Widget _buildThumbnail(int pageNum, bool isSelected) {
     final cachedImage = _pageCache[pageNum];
     return GestureDetector(
@@ -304,14 +501,10 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Show cached image or page number placeholder
             ClipRRect(
               borderRadius: BorderRadius.circular(3),
               child: cachedImage?.bytes != null
-                  ? Image.memory(
-                      cachedImage!.bytes,
-                      fit: BoxFit.cover,
-                    )
+                  ? Image.memory(cachedImage!.bytes, fit: BoxFit.cover)
                   : Center(
                       child: Text(
                         '$pageNum',
@@ -323,19 +516,15 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                       ),
                     ),
             ),
-            // Page number overlay
             Positioned(
               bottom: 2,
               right: 2,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 4,
-                  vertical: 1,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? Colors.blue
-                      : Colors.black.withOpacity(0.6),
+                      : Colors.black.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(2),
                 ),
                 child: Text(
@@ -354,6 +543,11 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     );
   }
 
+  Widget _buildLoadingState() => _PdfLoadingView(
+    progress: _downloadProgress,
+    openingDoc: _downloadFinished,
+  );
+
   void _goToPage(int page) {
     if (page >= 1 && page <= _totalPages) {
       _pageController.animateToPage(
@@ -365,11 +559,15 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 
   void _scrollThumbnailToPage(int page) {
-    if (!_thumbnailScrollController.hasClients) return;
+    if (!_thumbnailScrollController.hasClients) {
+      return;
+    }
+
     final targetOffset = (page - 1) * 68.0;
     final maxScroll = _thumbnailScrollController.position.maxScrollExtent;
     final viewportWidth = _thumbnailScrollController.position.viewportDimension;
     final centeredOffset = targetOffset - (viewportWidth / 2) + 34;
+
     _thumbnailScrollController.animateTo(
       centeredOffset.clamp(0.0, maxScroll),
       duration: const Duration(milliseconds: 200),
@@ -378,7 +576,29 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 
   @override
+  Future<void> _backgroundDownloadAllPages(int totalPages) async {
+    _logViewer('bg-download-start', {'totalPages': totalPages});
+    for (int page = 1; page <= totalPages; page++) {
+      if (_backgroundDownloadCancelled || !mounted) break;
+      try {
+        await PdfCacheService.fetchPage(
+          pdfFile: widget.pdfFile,
+          userPhone: widget.userPhone,
+          pageNumber: page,
+        );
+      } catch (_) {
+        // Don't abort the whole download if one page fails
+      }
+      if (mounted) setState(() => _bgDownloadedPages = page);
+    }
+    if (mounted) {
+      setState(() => _bgDownloadDone = true);
+      _logViewer('bg-download-complete', {'totalPages': totalPages});
+    }
+  }
+
   void dispose() {
+    _backgroundDownloadCancelled = true;
     _disableSecureMode();
     _transformationController.removeListener(_onZoomChanged);
     _transformationController.dispose();
@@ -386,6 +606,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     _scrollController?.dispose();
     _thumbnailScrollController.dispose();
     _pageCache.clear();
+    _loadedDocument?.close();
     super.dispose();
   }
 
@@ -396,107 +617,101 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // Main PDF view — page mode or scroll mode
             Positioned.fill(
-              bottom: !_scrollMode && _documentReady && _totalPages > 0 ? 100 : 0,
+              bottom: !_scrollMode && _documentReady && _totalPages > 0
+                  ? 100
+                  : 0,
               child: _scrollMode
                   ? FutureBuilder<PdfDocument>(
                       future: _scrollDocumentFuture,
                       builder: (context, snapshot) {
                         if (snapshot.hasError) {
                           return Center(
-                            child: Text(
-                              _formatLoadError(snapshot.error!),
-                              style: const TextStyle(color: Colors.black54),
-                              textAlign: TextAlign.center,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                              ),
+                              child: Text(
+                                _formatLoadError(snapshot.error!),
+                                style: const TextStyle(color: Colors.black54),
+                                textAlign: TextAlign.center,
+                              ),
                             ),
                           );
                         }
+
                         if (!snapshot.hasData) {
                           return const Center(
                             child: CircularProgressIndicator(),
                           );
                         }
-                        return PdfViewPinch(
-                          controller: _scrollController!,
-                        );
+
+                        return PdfViewPinch(controller: _scrollController!);
                       },
                     )
                   : _errorMessage != null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 24),
-                            child: Text(
-                              _errorMessage!,
-                              style: const TextStyle(color: Colors.black54),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        )
-                      : _documentReady
-                      ? Listener(
-                          onPointerDown: (_) {
-                            _pointerCount++;
-                            if (_pointerCount >= 2) {
-                              setState(() {});
-                            }
-                          },
-                          onPointerUp: (_) {
-                            _pointerCount--;
-                            if (_pointerCount < 2) {
-                              setState(() {});
-                            }
-                          },
-                          onPointerCancel: (_) {
-                            _pointerCount--;
-                            if (_pointerCount < 2) {
-                              setState(() {});
-                            }
-                          },
-                          child: PageView.builder(
-                            controller: _pageController,
-                            itemCount: _totalPages,
-                            physics: (_isZoomedIn || _pointerCount >= 2)
-                                ? const NeverScrollableScrollPhysics()
-                                : null,
-                            onPageChanged: (index) {
-                              // Reset zoom when changing pages
-                              _transformationController.value = Matrix4.identity();
-                              setState(() {
-                                _currentPage = index + 1;
-                              });
-                              _preloadAdjacentPages(index + 1);
-                              _scrollThumbnailToPage(index + 1);
-                            },
-                            itemBuilder: (context, index) {
-                              return _buildPageWidget(index + 1);
-                            },
-                          ),
-                        )
-                      : const Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              CircularProgressIndicator(),
-                              SizedBox(height: 16),
-                              Text(
-                                'Loading document...',
-                                style: TextStyle(color: Colors.black54),
-                              ),
-                            ],
-                          ),
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Text(
+                          _errorMessage!,
+                          style: const TextStyle(color: Colors.black54),
+                          textAlign: TextAlign.center,
                         ),
+                      ),
+                    )
+                  : _documentReady
+                  ? Listener(
+                      onPointerDown: (_) {
+                        _pointerCount++;
+                        if (_pointerCount >= 2) {
+                          setState(() {});
+                        }
+                      },
+                      onPointerUp: (_) {
+                        _pointerCount--;
+                        if (_pointerCount < 2) {
+                          setState(() {});
+                        }
+                      },
+                      onPointerCancel: (_) {
+                        _pointerCount--;
+                        if (_pointerCount < 2) {
+                          setState(() {});
+                        }
+                      },
+                      child: PageView.builder(
+                        controller: _pageController,
+                        itemCount: _totalPages,
+                        physics: (_isZoomedIn || _pointerCount >= 2)
+                            ? const NeverScrollableScrollPhysics()
+                            : null,
+                        onPageChanged: (index) {
+                          _transformationController.value = Matrix4.identity();
+                          setState(() {
+                            _currentPage = index + 1;
+                          });
+                          _preloadAdjacentPages(index + 1);
+                          _scrollThumbnailToPage(index + 1);
+                        },
+                        itemBuilder: (context, index) {
+                          return _buildPageWidget(index + 1);
+                        },
+                      ),
+                    )
+                  : _buildLoadingState(),
             ),
-            // Page indicator - top left
             if (_totalPages > 0)
               Positioned(
                 left: 16,
                 top: 16,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
+                    color: Colors.black.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -509,8 +724,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                   ),
                 ),
               ),
-            // Toggle button - top right
-            if (_documentReady)
+            if (_documentReady && _localPdfPath != null)
               Positioned(
                 right: 16,
                 top: 16,
@@ -518,9 +732,11 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                   onTap: _toggleScrollMode,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
+                      color: Colors.black.withValues(alpha: 0.6),
                       borderRadius: BorderRadius.circular(25),
                     ),
                     child: Row(
@@ -545,7 +761,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                   ),
                 ),
               ),
-            // Thumbnail strip - bottom (only in page mode)
             if (!_scrollMode && _documentReady && _totalPages > 0)
               Positioned(
                 left: 0,
@@ -563,7 +778,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                     controller: _thumbnailScrollController,
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 8),
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
                     itemCount: _totalPages,
                     itemBuilder: (context, index) {
                       final pageNum = index + 1;
@@ -573,6 +790,190 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                   ),
                 ),
               ),
+            if (!_bgDownloadDone && _totalPages > 0 && widget.pdfFile.pageCount > 0)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: (!_scrollMode && _documentReady && _totalPages > 0) ? 100 : 0,
+                child: Container(
+                  height: 20,
+                  color: Colors.black.withValues(alpha: 0.75),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: LinearProgressIndicator(
+                            value: _totalPages > 0
+                                ? _bgDownloadedPages / _totalPages
+                                : null,
+                            backgroundColor: Colors.grey[700],
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              Colors.lightBlueAccent,
+                            ),
+                            minHeight: 4,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '$_bgDownloadedPages / $_totalPages pages',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  final double? progress;
+  final double angle;
+
+  _RingPainter({required this.progress, required this.angle});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 5;
+    final trackPaint = Paint()
+      ..color = Colors.grey.shade200
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 10
+      ..strokeCap = StrokeCap.round;
+    final arcPaint = Paint()
+      ..color = Colors.blue
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 10
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawCircle(center, radius, trackPaint);
+
+    if (progress != null) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        -math.pi / 2,
+        progress! * 2 * math.pi,
+        false,
+        arcPaint,
+      );
+    } else {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        angle - math.pi / 2,
+        math.pi / 2,
+        false,
+        arcPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) =>
+      old.progress != progress || old.angle != angle;
+}
+
+class _PdfLoadingView extends StatefulWidget {
+  final double? progress;
+  final bool openingDoc;
+  const _PdfLoadingView({this.progress, this.openingDoc = false});
+
+  @override
+  State<_PdfLoadingView> createState() => _PdfLoadingViewState();
+}
+
+class _PdfLoadingViewState extends State<_PdfLoadingView>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _rotateCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotateCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _rotateCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = widget.progress != null
+        ? (widget.progress! * 100).clamp(0, 100).toStringAsFixed(0)
+        : null;
+    final isSpinning = widget.progress == null && !widget.openingDoc;
+
+    return Container(
+      color: Colors.white,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 160,
+              height: 160,
+              child: AnimatedBuilder(
+                animation: _rotateCtrl,
+                builder: (context, _) {
+                  return CustomPaint(
+                    painter: _RingPainter(
+                      progress: widget.openingDoc ? 1.0 : widget.progress,
+                      angle: _rotateCtrl.value * 2 * math.pi,
+                    ),
+                    child: Center(
+                      child: widget.openingDoc
+                          ? Text(
+                              'Opening…',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade500,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            )
+                          : pct != null
+                              ? Text(
+                                  '$pct%',
+                                  style: const TextStyle(
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue,
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.hourglass_top_rounded,
+                                  size: 32,
+                                  color: Colors.grey.shade400,
+                                ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            if (!widget.openingDoc && !isSpinning) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Downloading…',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade400,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ],
         ),
       ),

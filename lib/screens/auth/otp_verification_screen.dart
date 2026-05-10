@@ -249,7 +249,35 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
                     textAlign: TextAlign.center,
                   ),
 
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 24),
+
+                  // Highlighted note: OTP via call
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.amber.shade600, width: 1.5),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.phone_in_talk, color: Colors.amber.shade800, size: 22),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'You will receive a phone call. Please answer and listen carefully — the OTP will be spoken to you.',
+                            style: TextStyle(
+                              color: Colors.amber.shade900,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
 
                   // OTP Input Fields (4 digits for Voice OTP)
                   Row(

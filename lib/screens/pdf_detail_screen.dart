@@ -35,10 +35,8 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => PdfViewerScreen(
-          pdfUrl: pdfFile.fileUrl,
-          userPhone: userPhone,
-        ),
+        builder: (context) =>
+            PdfViewerScreen(pdfFile: pdfFile, userPhone: userPhone),
       ),
     );
   }
@@ -150,8 +148,18 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
 
   String _formatDate(DateTime date) {
     final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
@@ -179,7 +187,10 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.arrow_back, color: Colors.white),
+                          icon: const Icon(
+                            Icons.arrow_back,
+                            color: Colors.white,
+                          ),
                           onPressed: () => Navigator.pop(context),
                         ),
                         Row(
@@ -191,38 +202,47 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                               ),
                               onPressed: () {
                                 if (authState.isLoggedIn) {
-                                  ref.read(authProvider.notifier).toggleFavourite(pdfFile.id);
+                                  ref
+                                      .read(authProvider.notifier)
+                                      .toggleFavourite(pdfFile.id);
                                 } else {
                                   _showLoginDialog();
                                 }
                               },
                             ),
                             IconButton(
-                          icon: const Icon(Icons.more_vert, color: Colors.white),
-                          onPressed: () {
-                            showModalBottomSheet(
-                              context: context,
-                              builder: (context) => Container(
-                                padding: const EdgeInsets.symmetric(vertical: 20),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ListTile(
-                                      leading: const Icon(Icons.share),
-                                      title: const Text('Share'),
-                                      onTap: () => Navigator.pop(context),
-                                    ),
-                                    ListTile(
-                                      leading: const Icon(Icons.report_outlined),
-                                      title: const Text('Report'),
-                                      onTap: () => Navigator.pop(context),
-                                    ),
-                                  ],
-                                ),
+                              icon: const Icon(
+                                Icons.more_vert,
+                                color: Colors.white,
                               ),
-                            );
-                          },
-                        ),
+                              onPressed: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  builder: (context) => Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 20,
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        ListTile(
+                                          leading: const Icon(Icons.share),
+                                          title: const Text('Share'),
+                                          onTap: () => Navigator.pop(context),
+                                        ),
+                                        ListTile(
+                                          leading: const Icon(
+                                            Icons.report_outlined,
+                                          ),
+                                          title: const Text('Report'),
+                                          onTap: () => Navigator.pop(context),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                           ],
                         ),
                       ],
@@ -255,13 +275,21 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                                     const SizedBox(height: 6),
                                     Row(
                                       children: [
-                                        Icon(Icons.person_outline, size: 16, color: Colors.white.withOpacity(0.7)),
+                                        Icon(
+                                          Icons.person_outline,
+                                          size: 16,
+                                          color: Colors.white.withValues(
+                                            alpha: 0.7,
+                                          ),
+                                        ),
                                         const SizedBox(width: 4),
                                         Expanded(
                                           child: Text(
                                             pdfFile.displayAuthor,
                                             style: TextStyle(
-                                              color: Colors.white.withOpacity(0.7),
+                                              color: Colors.white.withValues(
+                                                alpha: 0.7,
+                                              ),
                                               fontSize: 14,
                                             ),
                                             maxLines: 1,
@@ -294,7 +322,9 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                                         borderRadius: BorderRadius.circular(6),
                                         boxShadow: [
                                           BoxShadow(
-                                            color: Colors.black.withOpacity(0.25),
+                                            color: Colors.black.withValues(
+                                              alpha: 0.25,
+                                            ),
                                             blurRadius: 10,
                                             offset: const Offset(3, 4),
                                           ),
@@ -312,14 +342,20 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                                               decoration: BoxDecoration(
                                                 gradient: LinearGradient(
                                                   colors: [
-                                                    Colors.black.withOpacity(0.08),
+                                                    Colors.black.withValues(
+                                                      alpha: 0.08,
+                                                    ),
                                                     Colors.transparent,
                                                   ],
                                                 ),
-                                                borderRadius: const BorderRadius.only(
-                                                  topLeft: Radius.circular(6),
-                                                  bottomLeft: Radius.circular(6),
-                                                ),
+                                                borderRadius:
+                                                    const BorderRadius.only(
+                                                      topLeft: Radius.circular(
+                                                        6,
+                                                      ),
+                                                      bottomLeft:
+                                                          Radius.circular(6),
+                                                    ),
                                               ),
                                             ),
                                           ),
@@ -329,16 +365,28 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                                             right: 20,
                                             top: 30,
                                             child: Column(
-                                              children: List.generate(5, (i) => Padding(
-                                                padding: const EdgeInsets.only(bottom: 6),
-                                                child: Container(
-                                                  height: 2,
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.grey.withOpacity(0.15),
-                                                    borderRadius: BorderRadius.circular(1),
+                                              children: List.generate(
+                                                5,
+                                                (i) => Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        bottom: 6,
+                                                      ),
+                                                  child: Container(
+                                                    height: 2,
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.grey
+                                                          .withValues(
+                                                            alpha: 0.15,
+                                                          ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            1,
+                                                          ),
+                                                    ),
                                                   ),
                                                 ),
-                                              )),
+                                              ),
                                             ),
                                           ),
                                           // Center book icon
@@ -352,7 +400,8 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                                                   end: Alignment.bottomRight,
                                                   colors: course.gradientColors,
                                                 ),
-                                                borderRadius: BorderRadius.circular(14),
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
                                               ),
                                               child: const Icon(
                                                 Icons.auto_stories_rounded,
@@ -367,12 +416,16 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                                             right: 20,
                                             bottom: 16,
                                             child: Container(
-                                              padding: const EdgeInsets.symmetric(vertical: 7),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 7,
+                                                  ),
                                               decoration: BoxDecoration(
                                                 gradient: LinearGradient(
                                                   colors: course.gradientColors,
                                                 ),
-                                                borderRadius: BorderRadius.circular(20),
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
                                               ),
                                               child: Center(
                                                 child: Text(
@@ -408,7 +461,9 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: Colors.amber,
-                                          borderRadius: BorderRadius.circular(4),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -485,7 +540,11 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildStatItem(Icons.visibility_outlined, '${pdfFile.viewCount}', 'Views'),
+                  _buildStatItem(
+                    Icons.visibility_outlined,
+                    '${pdfFile.viewCount}',
+                    'Views',
+                  ),
                   _buildStatItem(Icons.description_outlined, '-', 'Pages'),
                   _buildSaveButton(authState),
                 ],
@@ -500,7 +559,9 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                 children: [
                   CircleAvatar(
                     radius: 24,
-                    backgroundColor: course.gradientColors[0].withOpacity(0.2),
+                    backgroundColor: course.gradientColors[0].withValues(
+                      alpha: 0.2,
+                    ),
                     child: Icon(
                       Icons.person,
                       color: course.gradientColors[0],
@@ -543,19 +604,22 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
                 children: [
                   const Text(
                     'Topics',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _buildTopicChip(course.abbreviation, course.gradientColors[0]),
+                      _buildTopicChip(
+                        course.abbreviation,
+                        course.gradientColors[0],
+                      ),
                       if (pdfFile.subject != 'uncategorized')
-                        _buildTopicChip(pdfFile.subject, course.gradientColors[1]),
+                        _buildTopicChip(
+                          pdfFile.subject,
+                          course.gradientColors[1],
+                        ),
                       if (pdfFile.hasAccessBadge)
                         _buildTopicChip(
                           pdfFile.accessLabel,
@@ -581,17 +645,11 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
         if (value.isNotEmpty)
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           ),
         Text(
           label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey.shade600,
-          ),
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
         ),
       ],
     );
@@ -677,4 +735,3 @@ class _PdfDetailScreenState extends ConsumerState<PdfDetailScreen> {
     );
   }
 }
-

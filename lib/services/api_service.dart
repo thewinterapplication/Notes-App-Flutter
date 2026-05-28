@@ -1,19 +1,24 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/broadcast_session.dart';
+import '../models/resume_template.dart';
 import '../models/course.dart';
 import '../models/pdf_file.dart';
 import '../models/subscription_checkout_session.dart';
 import '../models/subscription_plan.dart';
+import '../models/career_guidance_type.dart';
 
 /// API Service to connect to server
 class ApiService {
   // Single source of truth - use machine IP for all platforms
   // static const String baseUrl = 'https://notes-app-server-wczw.onrender.com';
-  // static const String baseUrl = 'http://192.168.1.4:3000';
+  // static const String baseUrl = 'http://192.168.1.33:3000';
   static const String baseUrl = 'https://notes.codebinary.in';
 
 
@@ -21,6 +26,83 @@ class ApiService {
   static const int maxRetries = 3;
   static const Duration retryDelay = Duration(seconds: 3);
   static const Duration requestTimeout = Duration(seconds: 30);
+
+  // --- Single-device session handling ---------------------------------------
+
+  static const String _tokenKey = 'sessionId';
+  static const String _deviceIdKey = 'deviceId';
+
+  /// The active session token for this device. Sent as a Bearer token on every
+  /// request. Cleared when the session is revoked (logged in elsewhere).
+  static String? _sessionToken;
+
+  /// A stable per-install identifier, shown to the user as the active device.
+  static String? _deviceId;
+
+  /// Invoked when the backend reports SESSION_REVOKED (this number logged in on
+  /// another device). The auth layer registers this to force a logout + return
+  /// to the login screen.
+  static void Function()? onSessionRevoked;
+
+  static String? get sessionToken => _sessionToken;
+  static String? get deviceId => _deviceId;
+
+  /// Load the persisted session token and device id. Call once at startup.
+  static Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    _sessionToken = prefs.getString(_tokenKey);
+
+    var id = prefs.getString(_deviceIdKey);
+    if (id == null || id.isEmpty) {
+      id = _generateDeviceId();
+      await prefs.setString(_deviceIdKey, id);
+    }
+    _deviceId = id;
+  }
+
+  static Future<void> setSessionToken(String token) async {
+    _sessionToken = token;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tokenKey, token);
+  }
+
+  static Future<void> clearSessionToken() async {
+    _sessionToken = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tokenKey);
+  }
+
+  static String _generateDeviceId() {
+    final rand = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rand.nextInt(256));
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  static Map<String, String> _headers() {
+    final headers = {'Content-Type': 'application/json'};
+    final token = _sessionToken;
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    return headers;
+  }
+
+  /// Inspect a response for a revoked session. Returns true if revoked so the
+  /// caller can stop processing; also fires [onSessionRevoked] once.
+  static bool _checkRevoked(http.Response response) {
+    if (response.statusCode != 401) return false;
+    try {
+      final body = jsonDecode(response.body);
+      if (body is Map && body['code'] == 'SESSION_REVOKED') {
+        clearSessionToken();
+        onSessionRevoked?.call();
+        return true;
+      }
+    } catch (_) {
+      // Non-JSON 401 — treat as a normal failure, not a forced logout.
+    }
+    return false;
+  }
 
   // Helper method to make HTTP requests with retry logic
   static Future<http.Response> _postWithRetry(
@@ -30,13 +112,15 @@ class ApiService {
     Exception? lastError;
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        return await http
+        final response = await http
             .post(
               Uri.parse(url),
-              headers: {'Content-Type': 'application/json'},
+              headers: _headers(),
               body: jsonEncode(body),
             )
             .timeout(requestTimeout);
+        _checkRevoked(response);
+        return response;
       } catch (e) {
         lastError = e as Exception;
         if (attempt < maxRetries) {
@@ -51,9 +135,11 @@ class ApiService {
     Exception? lastError;
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        return await http
-            .get(Uri.parse(url), headers: {'Content-Type': 'application/json'})
+        final response = await http
+            .get(Uri.parse(url), headers: _headers())
             .timeout(requestTimeout);
+        _checkRevoked(response);
+        return response;
       } catch (e) {
         lastError = e as Exception;
         if (attempt < maxRetries) {
@@ -71,13 +157,15 @@ class ApiService {
     Exception? lastError;
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        return await http
+        final response = await http
             .put(
               Uri.parse(url),
-              headers: {'Content-Type': 'application/json'},
+              headers: _headers(),
               body: jsonEncode(body),
             )
             .timeout(requestTimeout);
+        _checkRevoked(response);
+        return response;
       } catch (e) {
         lastError = e as Exception;
         if (attempt < maxRetries) {
@@ -92,10 +180,17 @@ class ApiService {
     try {
       final response = await _postWithRetry('$baseUrl/api/login', {
         'phone': phone,
+        'deviceId': _deviceId,
       });
 
       if (response.statusCode == 200) {
-        return {'success': true, 'data': jsonDecode(response.body)};
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        // Persist the single-device session token issued by the backend.
+        final token = data['sessionId'] as String?;
+        if (token != null && token.isNotEmpty) {
+          await setSessionToken(token);
+        }
+        return {'success': true, 'data': data};
       } else {
         final error = jsonDecode(response.body);
         return {
@@ -119,10 +214,16 @@ class ApiService {
       final response = await _postWithRetry('$baseUrl/api/register', {
         'name': name,
         'phone': phone,
+        'deviceId': _deviceId,
       });
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return {'success': true, 'data': jsonDecode(response.body)};
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final token = data['sessionId'] as String?;
+        if (token != null && token.isNotEmpty) {
+          await setSessionToken(token);
+        }
+        return {'success': true, 'data': data};
       } else {
         final error = jsonDecode(response.body);
         return {
@@ -187,11 +288,21 @@ class ApiService {
       final response = await _postWithRetry('$baseUrl/otp/verify', {
         'sessionId': sessionId,
         'otp': otp,
+        'deviceId': _deviceId,
       });
 
       final data = jsonDecode(response.body);
       if (data['success'] == true) {
-        return {'success': true, 'message': data['message']};
+        // For an existing user the backend already issues a session token here.
+        final token = data['sessionId'] as String?;
+        if (token != null && token.isNotEmpty) {
+          await setSessionToken(token);
+        }
+        return {
+          'success': true,
+          'message': data['message'],
+          'registered': data['registered'],
+        };
       } else {
         return {'success': false, 'message': data['message'] ?? 'Invalid OTP'};
       }
@@ -546,10 +657,10 @@ class ApiService {
     }
   }
 
-  /// Get user profile (includes favourites)
-  static Future<Map<String, dynamic>> getUserProfile(String phone) async {
+  /// Get the logged-in user's profile (token-authenticated, includes favourites)
+  static Future<Map<String, dynamic>> getUserProfile() async {
     try {
-      final response = await _getWithRetry('$baseUrl/api/user/$phone');
+      final response = await _getWithRetry('$baseUrl/api/user/profile');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -563,6 +674,32 @@ class ApiService {
         'message': 'Server is starting up. Please wait and try again.',
       };
     }
+  }
+
+  /// Confirm this device still holds the active session. Returns
+  /// {'revoked': true} when another device has taken over (handled globally
+  /// via onSessionRevoked, but exposed here for explicit checks).
+  static Future<Map<String, dynamic>> checkSession() async {
+    try {
+      final response = await _getWithRetry('$baseUrl/api/session/check');
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': jsonDecode(response.body)};
+      }
+      return {'success': false, 'revoked': response.statusCode == 401};
+    } catch (e) {
+      // Network error — don't treat as revoked.
+      return {'success': false, 'revoked': false};
+    }
+  }
+
+  /// Tell the backend to clear this device's active session.
+  static Future<void> logout() async {
+    try {
+      await _postWithRetry('$baseUrl/api/logout', {});
+    } catch (_) {
+      // Best-effort; the local token is cleared regardless.
+    }
+    await clearSessionToken();
   }
 
   /// Fetch subscription plans configured on the backend
@@ -762,14 +899,13 @@ class ApiService {
     }
   }
 
-  /// Update user favourites
+  /// Update the logged-in user's favourites (token-authenticated)
   static Future<Map<String, dynamic>> updateFavourites(
-    String phone,
     List<String> favourites,
   ) async {
     try {
       final response = await _putWithRetry(
-        '$baseUrl/api/user/$phone/favourites',
+        '$baseUrl/api/user/favourites',
         {'favourites': favourites},
       );
 
@@ -850,5 +986,108 @@ class ApiService {
     } catch (e) {
       return {'success': false, 'message': 'Upload failed: ${e.toString()}'};
     }
+  }
+
+  static Future<Map<String, dynamic>> createGuidanceRequest({
+    required String userPhone,
+    required DateTime scheduledAt,
+    required String description,
+  }) async {
+    final res = await _postWithRetry('$baseUrl/api/guidance', {
+      'userPhone': userPhone,
+      'scheduledAt': scheduledAt.toUtc().toIso8601String(),
+      'description': description,
+    });
+    if (res.statusCode != 200) {
+      throw Exception('Guidance request failed: ${res.body}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  static Future<List<Map<String, dynamic>>> getMyGuidanceSessions({
+    required String userPhone,
+  }) async {
+    developer.log('[API] getMyGuidanceSessions: phone=$userPhone');
+    final res = await _getWithRetry(
+      '$baseUrl/api/guidance/my?phone=${Uri.encodeComponent(userPhone)}',
+    );
+    if (res.statusCode != 200) {
+      throw Exception('Failed to fetch sessions: ${res.body}');
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return (data['sessions'] as List? ?? const [])
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+  }
+
+  static Future<List<CareerGuidanceType>> getCareerGuidanceTypes() async {
+    developer.log('[API] getCareerGuidanceTypes');
+    final res = await _getWithRetry('$baseUrl/api/career-types');
+    if (res.statusCode != 200) {
+      throw Exception('Failed to fetch career types: ${res.body}');
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    final list = (data['types'] as List? ?? const []);
+    return list
+        .map((item) => CareerGuidanceType.fromJson(Map<String, dynamic>.from(item as Map)))
+        .toList();
+  }
+
+  static Future<Map<String, dynamic>> createGuidanceOrder({
+    required String userPhone,
+    required String typeSlug,
+    required DateTime scheduledAt,
+    required String description,
+  }) async {
+    developer.log('[API] createGuidanceOrder: phone=$userPhone, type=$typeSlug');
+    final res = await _postWithRetry('$baseUrl/api/guidance/create-order', {
+      'userPhone': userPhone,
+      'typeSlug': typeSlug,
+      'scheduledAt': scheduledAt.toUtc().toIso8601String(),
+      'description': description,
+    });
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      throw Exception('Failed to create guidance order: ${res.body}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  static Future<List<ResumeTemplate>> getResumeTemplates() async {
+    final res = await _getWithRetry('$baseUrl/api/resume-templates');
+    if (res.statusCode != 200) throw Exception('Failed to fetch templates');
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return (data['templates'] as List? ?? const [])
+        .map((item) => ResumeTemplate.fromJson(Map<String, dynamic>.from(item as Map)))
+        .toList();
+  }
+
+  static Future<List<BroadcastSession>> getBroadcastSessions() async {
+    final res = await _getWithRetry('$baseUrl/api/broadcast');
+    if (res.statusCode != 200) {
+      throw Exception('Failed to fetch broadcast sessions: ${res.body}');
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return (data['sessions'] as List? ?? const [])
+        .map((item) => BroadcastSession.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ))
+        .toList();
+  }
+
+  static Future<Map<String, dynamic>> verifyGuidancePayment({
+    required String orderId,
+    required String paymentId,
+    required String signature,
+  }) async {
+    developer.log('[API] verifyGuidancePayment: orderId=$orderId');
+    final res = await _postWithRetry('$baseUrl/api/guidance/verify-payment', {
+      'orderId': orderId,
+      'paymentId': paymentId,
+      'signature': signature,
+    });
+    if (res.statusCode != 200) {
+      throw Exception('Payment verification failed: ${res.body}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
   }
 }

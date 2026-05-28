@@ -1,7 +1,9 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../globals.dart';
 import '../models/user_subscription.dart';
+import '../screens/auth/login_page.dart';
 import '../services/api_service.dart';
 
 /// Authentication state
@@ -46,7 +48,12 @@ class AuthState {
 
 /// Authentication state notifier
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier() : super(const AuthState());
+  AuthNotifier() : super(const AuthState()) {
+    // Force a logout if the backend reports this number logged in elsewhere.
+    ApiService.onSessionRevoked = _handleSessionRevoked;
+  }
+
+  bool _handlingRevoke = false;
 
   /// Load authentication state from SharedPreferences
   Future<void> loadFromPrefs() async {
@@ -54,7 +61,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final userName = prefs.getString('userName') ?? '';
     final userPhone = prefs.getString('userPhone') ?? '';
 
-    final isLoggedIn = userName.isNotEmpty && userPhone.isNotEmpty;
+    // Logged in only if we also hold a session token for this device.
+    final hasToken = (ApiService.sessionToken ?? '').isNotEmpty;
+    final isLoggedIn = userName.isNotEmpty && userPhone.isNotEmpty && hasToken;
 
     state = AuthState(
       userName: userName,
@@ -68,7 +77,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Login - save to prefs and update state
+  /// Login - save to prefs and update state.
+  /// The session token is persisted by ApiService during login/register.
   Future<void> login(String name, String phone) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('userName', name);
@@ -84,8 +94,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await refreshProfile();
   }
 
-  /// Logout - clear prefs and reset state
+  /// Logout - clear the backend session, prefs, and reset state.
   Future<void> logout() async {
+    await ApiService.logout();
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('userName');
     await prefs.remove('userPhone');
@@ -98,12 +110,54 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
   }
 
+  /// Triggered when another device logs in with this number. Clears local
+  /// state and sends the user back to the login screen.
+  Future<void> _handleSessionRevoked() async {
+    if (_handlingRevoke) return; // avoid duplicate handling from parallel calls
+    _handlingRevoke = true;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('userName');
+    await prefs.remove('userPhone');
+    await ApiService.clearSessionToken();
+
+    state = const AuthState(
+      userName: '',
+      userPhone: '',
+      isLoggedIn: false,
+      isLoading: false,
+    );
+
+    final navigator = navigatorKey.currentState;
+    if (navigator != null) {
+      navigator.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (route) => false,
+      );
+      final messengerContext = navigatorKey.currentContext;
+      if (messengerContext != null) {
+        // ignore: use_build_context_synchronously
+        ScaffoldMessenger.of(messengerContext).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'You were logged out because your number was used on another device.',
+            ),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+
+    _handlingRevoke = false;
+  }
+
   /// Load the latest profile from the backend
   Future<void> refreshProfile() async {
     if (state.userPhone.isEmpty) return;
 
     try {
-      final result = await ApiService.getUserProfile(state.userPhone);
+      final result = await ApiService.getUserProfile();
       debugPrint('[Auth] getUserProfile result: $result');
 
       if (result['success'] == true && result['data'] != null) {
@@ -163,7 +217,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     state = state.copyWith(favourites: current);
 
-    final result = await ApiService.updateFavourites(state.userPhone, current);
+    final result = await ApiService.updateFavourites(current);
     if (result['success'] == true && result['favourites'] != null) {
       state = state.copyWith(
         favourites: List<String>.from(result['favourites']),

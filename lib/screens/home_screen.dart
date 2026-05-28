@@ -10,9 +10,10 @@ import 'course_subjects_screen.dart';
 import 'bookmarks_screen.dart';
 import 'splash_screen.dart';
 import 'subscription_screen.dart';
-import 'upload_notes_screen.dart';
 import 'jobs_screen.dart';
 import 'upskill_screen.dart';
+import 'sessions_screen.dart';
+import 'resume_templates_screen.dart';
 
 /// Home Screen with new wireframe-based design
 class HomeScreen extends ConsumerStatefulWidget {
@@ -22,7 +23,8 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final TextEditingController _coursesSearchController =
       TextEditingController();
@@ -30,7 +32,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String _coursesSearchQuery = '';
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // On returning to the foreground, re-validate the session. If this number
+    // has logged in on another device, refreshProfile hits a 401 and the
+    // global handler forces a logout back to the login screen.
+    if (state == AppLifecycleState.resumed) {
+      ref.read(authProvider.notifier).refreshProfile();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _coursesSearchController.dispose();
     super.dispose();
   }
@@ -1043,6 +1062,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     () {
                       Navigator.pop(context);
                       _openSubscriptionScreen();
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _buildDrawerItem(
+                    Icons.calendar_month_rounded,
+                    'Sessions',
+                    const Color(0xFF6366F1),
+                    () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SessionsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _buildDrawerItem(
+                    Icons.description_rounded,
+                    'Resume Templates',
+                    const Color(0xFFE85D04),
+                    () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ResumeTemplatesScreen(),
+                        ),
+                      );
                     },
                   ),
                   // const SizedBox(height: 8),

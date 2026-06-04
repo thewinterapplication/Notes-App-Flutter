@@ -1,5 +1,7 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'package:pdfx/pdfx.dart';
 import '../models/resume_template.dart';
 import '../services/api_service.dart';
 import 'resume_template_detail_screen.dart';
@@ -188,6 +190,24 @@ class _TemplateCard extends StatelessWidget {
         ? [const Color(0xFFEF4444), const Color(0xFFB91C1C)]
         : [const Color(0xFF3B82F6), const Color(0xFF1D4ED8)];
 
+    Widget preview;
+    if (template.thumbnailUrl.isNotEmpty) {
+      preview = Image.network(
+        template.thumbnailUrl,
+        fit: BoxFit.fitWidth,
+        alignment: Alignment.topCenter,
+        errorBuilder: (_, __, ___) =>
+            _IconPlaceholder(colors: gradientColors, isPdf: isPdf),
+      );
+    } else if (isPdf) {
+      preview = _PdfTopPreview(
+        url: template.fileUrl,
+        fallback: _IconPlaceholder(colors: gradientColors, isPdf: isPdf),
+      );
+    } else {
+      preview = _IconPlaceholder(colors: gradientColors, isPdf: isPdf);
+    }
+
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
@@ -202,18 +222,12 @@ class _TemplateCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Thumbnail / placeholder
             Expanded(
-              child: template.thumbnailUrl.isNotEmpty
-                  ? Image.network(
-                      template.thumbnailUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          _IconPlaceholder(colors: gradientColors, isPdf: isPdf),
-                    )
-                  : _IconPlaceholder(colors: gradientColors, isPdf: isPdf),
+              child: Container(
+                color: Colors.white,
+                child: ClipRect(child: preview),
+              ),
             ),
-            // Name + badge
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
               child: Column(
@@ -275,6 +289,123 @@ class _IconPlaceholder extends StatelessWidget {
           size: 56,
         ),
       ),
+    );
+  }
+}
+
+/// Caches raw PDF bytes by URL so the card preview and the detail viewer
+/// share one download. The list card additionally caches a rendered first-page
+/// PNG so it doesn't re-rasterize on every scroll back.
+class PdfPreviewCache {
+  static final Map<String, Uint8List> _pdfBytes = {};
+  static final Map<String, Uint8List> _firstPagePng = {};
+  static final Map<String, Future<Uint8List>> _inflight = {};
+
+  static Uint8List? getBytes(String url) => _pdfBytes[url];
+  static Uint8List? getFirstPage(String url) => _firstPagePng[url];
+  static void putFirstPage(String url, Uint8List png) =>
+      _firstPagePng[url] = png;
+
+  /// Fetches the PDF bytes (deduped across concurrent callers).
+  static Future<Uint8List> fetch(String url) {
+    final existing = _pdfBytes[url];
+    if (existing != null) return Future.value(existing);
+    final inflight = _inflight[url];
+    if (inflight != null) return inflight;
+
+    final future = () async {
+      try {
+        final response = await http
+            .get(Uri.parse(url))
+            .timeout(const Duration(seconds: 30));
+        if (response.statusCode != 200) {
+          throw Exception('HTTP ${response.statusCode}');
+        }
+        _pdfBytes[url] = response.bodyBytes;
+        return response.bodyBytes;
+      } finally {
+        _inflight.remove(url);
+      }
+    }();
+    _inflight[url] = future;
+    return future;
+  }
+}
+
+class _PdfTopPreview extends StatefulWidget {
+  const _PdfTopPreview({required this.url, required this.fallback});
+  final String url;
+  final Widget fallback;
+
+  @override
+  State<_PdfTopPreview> createState() => _PdfTopPreviewState();
+}
+
+class _PdfTopPreviewState extends State<_PdfTopPreview> {
+  Uint8List? _png;
+  bool _loading = true;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final cached = PdfPreviewCache.getFirstPage(widget.url);
+    if (cached != null) {
+      _png = cached;
+      _loading = false;
+    } else {
+      _render();
+    }
+  }
+
+  Future<void> _render() async {
+    try {
+      final pdfBytes = await PdfPreviewCache.fetch(widget.url);
+      final doc = await PdfDocument.openData(pdfBytes);
+      final page = await doc.getPage(1);
+      final img = await page.render(
+        width: page.width,
+        height: page.height,
+        format: PdfPageImageFormat.png,
+        backgroundColor: '#FFFFFF',
+      );
+      await page.close();
+      await doc.close();
+      final png = img?.bytes;
+      if (png == null) throw Exception('Render returned null');
+      PdfPreviewCache.putFirstPage(widget.url, png);
+      if (!mounted) return;
+      setState(() {
+        _png = png;
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('[ResumeTemplate] preview render failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _failed = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(strokeWidth: 2.5),
+        ),
+      );
+    }
+    if (_failed || _png == null) return widget.fallback;
+    return Image.memory(
+      _png!,
+      fit: BoxFit.fitWidth,
+      alignment: Alignment.topCenter,
+      gaplessPlayback: true,
     );
   }
 }

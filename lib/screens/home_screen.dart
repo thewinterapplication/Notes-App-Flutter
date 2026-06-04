@@ -2,18 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/course.dart';
+import '../models/subscription_plan.dart';
 import '../constants/app_constants.dart';
 import '../providers/auth_provider.dart';
 import '../providers/pdf_provider.dart';
+import '../providers/subscription_provider.dart';
 import '../widgets/subscription_banner.dart';
 import 'course_subjects_screen.dart';
 import 'bookmarks_screen.dart';
-import 'splash_screen.dart';
 import 'subscription_screen.dart';
 import 'jobs_screen.dart';
 import 'upskill_screen.dart';
 import 'sessions_screen.dart';
 import 'resume_templates_screen.dart';
+import 'profile_screen.dart';
 
 /// Home Screen with new wireframe-based design
 class HomeScreen extends ConsumerStatefulWidget {
@@ -35,6 +37,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Preload plans (idempotent) so the subscription banner can render live
+      // intro/recurring pricing instead of hardcoded amounts.
+      ref.read(subscriptionProvider.notifier).loadPlans();
+    });
   }
 
   @override
@@ -84,6 +91,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const SubscriptionScreen()),
+    );
+    ref.read(authProvider.notifier).refreshProfile();
+  }
+
+  Future<void> _openProfileScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ProfileScreen()),
     );
     ref.read(authProvider.notifier).refreshProfile();
   }
@@ -231,6 +246,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           if (!ref.watch(authProvider).hasActiveSubscription)
             SubscriptionBanner(
               subscription: ref.watch(authProvider).subscription,
+              plan: SubscriptionPlan.introOfferFrom(
+                ref.watch(subscriptionProvider).plans,
+              ),
               onTap: _openSubscriptionScreen,
             ),
 
@@ -956,68 +974,83 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         backgroundColor: Colors.white,
         child: Column(
           children: [
-            // Profile Section
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.only(
-                top: MediaQuery.of(context).padding.top + 24,
-                bottom: 24,
-                left: 20,
-                right: 20,
-              ),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF1A2530),
-                    Color(0xFF2D3E50),
-                    Color(0xFF3D5266),
+            // Profile Section (tap to open the profile page)
+            InkWell(
+              onTap: () {
+                Navigator.pop(context);
+                _openProfileScreen();
+              },
+              child: Container(
+                width: double.infinity,
+                padding: EdgeInsets.only(
+                  top: MediaQuery.of(context).padding.top + 24,
+                  bottom: 24,
+                  left: 20,
+                  right: 20,
+                ),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF1A2530),
+                      Color(0xFF2D3E50),
+                      Color(0xFF3D5266),
+                    ],
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.3),
+                              width: 2,
+                            ),
+                            color: Colors.white.withOpacity(0.15),
+                          ),
+                          child: const Icon(
+                            Icons.person,
+                            size: 32,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const Spacer(),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          color: Colors.white.withOpacity(0.7),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      authState.userName.isNotEmpty
+                          ? authState.userName
+                          : 'Guest User',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      authState.userPhone.isNotEmpty
+                          ? '+91 ${authState.userPhone}'
+                          : 'Not logged in',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 12,
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
-                        width: 2,
-                      ),
-                      color: Colors.white.withOpacity(0.15),
-                    ),
-                    child: const Icon(
-                      Icons.person,
-                      size: 32,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    authState.userName.isNotEmpty
-                        ? authState.userName
-                        : 'Guest User',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    authState.userPhone.isNotEmpty
-                        ? '+91 ${authState.userPhone}'
-                        : 'Not logged in',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
               ),
             ),
             Container(height: 1, color: Colors.grey.shade200),
@@ -1052,16 +1085,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           builder: (context) => const BookmarksScreen(),
                         ),
                       );
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  _buildDrawerItem(
-                    Icons.workspace_premium_rounded,
-                    'Membership',
-                    const Color(0xFF7C3AED),
-                    () {
-                      Navigator.pop(context);
-                      _openSubscriptionScreen();
                     },
                   ),
                   const SizedBox(height: 8),
@@ -1131,49 +1154,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Column(
                 children: [
-                  _buildDrawerItem(
-                    Icons.logout_rounded,
-                    'Logout',
-                    const Color(0xFFF44336),
-                    () async {
-                      Navigator.pop(context);
-                      final shouldLogout = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Logout'),
-                          content: const Text(
-                            'Are you sure you want to logout?',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: const Text('Cancel'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.red,
-                              ),
-                              child: const Text('Logout'),
-                            ),
-                          ],
-                        ),
-                      );
-                      if (shouldLogout == true) {
-                        await ref.read(authProvider.notifier).logout();
-                        if (mounted) {
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SplashScreen(),
-                            ),
-                            (route) => false,
-                          );
-                        }
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 8),
                   _buildDrawerItem(
                     Icons.privacy_tip_rounded,
                     'Privacy Policy',

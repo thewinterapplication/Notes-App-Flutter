@@ -181,17 +181,46 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       return;
     }
 
+    final allDigits = checkout.contact.replaceAll(RegExp(r'[^0-9]'), '');
+    final localDigits = allDigits.startsWith('91') && allDigits.length > 10
+        ? allDigits.substring(allDigits.length - 10)
+        : allDigits;
+    final syntheticEmail = '$localDigits@noreply.codebinary.in';
+
     final options = {
       'key': checkout.keyId,
       'subscription_id': checkout.subscriptionId,
       'name': checkout.brandName,
       'description': checkout.description,
-      'prefill': {'name': checkout.customerName, 'contact': checkout.contact},
+      'prefill': {
+        'name': checkout.customerName,
+        'contact': checkout.contact,
+        'email': syntheticEmail,
+      },
       'notes': checkout.notes,
       'theme': {'color': checkout.themeColor},
-      'readonly': {'contact': true, 'name': true},
+      'readonly': {'contact': true, 'name': true, 'email': true},
+      'hidden': {'contact': true, 'email': true},
       'modal': {'confirm_close': true},
       'retry': {'enabled': true, 'max_count': 1},
+      'display': {
+        'blocks': {
+          'upi_block': {
+            'name': 'Pay using UPI',
+            'instruments': [
+              {'method': 'upi'},
+            ],
+          },
+          'card_block': {
+            'name': 'Pay using Card',
+            'instruments': [
+              {'method': 'card'},
+            ],
+          },
+        },
+        'sequence': ['block.upi_block', 'block.card_block'],
+        'preferences': {'show_default_blocks': false},
+      },
     };
 
     developer.log(
@@ -445,6 +474,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     final authState = ref.watch(authProvider);
     final subscriptionState = ref.watch(subscriptionProvider);
     final selectedPlan = subscriptionState.selectedPlan;
+    final introPlan = SubscriptionPlan.introOfferFrom(subscriptionState.plans);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
@@ -499,7 +529,14 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                     selectedPlan != null ? 220 : 188,
                   ),
                   children: [
-                    _HeroCard(authState: authState, formatDate: _formatDate),
+                    _HeroCard(
+                      authState: authState,
+                      plan: introPlan,
+                      showYearlyHint: subscriptionState.plans.any(
+                        (p) => p.period == 'yearly',
+                      ),
+                      formatDate: _formatDate,
+                    ),
                     const SizedBox(height: 18),
                     if (authState.subscription.hasSubscriptionId)
                       _LiveStatusCard(
@@ -549,6 +586,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                           child: _PlanCard(
                             plan: plan,
                             isSelected: selectedPlan?.code == plan.code,
+                            showIntroOffer:
+                                authState.subscription.canUseIntroTrial,
                             onTap: () => ref
                                 .read(subscriptionProvider.notifier)
                                 .selectPlan(plan.code),
@@ -625,7 +664,10 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '${selectedPlan.amountLabel} / ${selectedPlan.billingLabel}',
+                            selectedPlan.hasIntroductoryOffer &&
+                                    authState.subscription.canUseIntroTrial
+                                ? '${selectedPlan.introductoryAmountLabel} ${selectedPlan.introductoryPeriodLabel}, ${selectedPlan.introductoryBillingLabel}'
+                                : '${selectedPlan.amountLabel} / ${selectedPlan.billingLabel}',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey.shade700,
@@ -694,14 +736,49 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
 }
 
 class _HeroCard extends StatelessWidget {
-  const _HeroCard({required this.authState, required this.formatDate});
+  const _HeroCard({
+    required this.authState,
+    required this.plan,
+    required this.showYearlyHint,
+    required this.formatDate,
+  });
 
   final AuthState authState;
+
+  /// The monthly plan carrying the intro offer, used to render live pricing.
+  /// May be null briefly before plans have loaded.
+  final SubscriptionPlan? plan;
+
+  /// Whether a yearly pass is also available, so the intro copy can point to it.
+  final bool showYearlyHint;
   final String Function(DateTime?) formatDate;
 
   @override
   Widget build(BuildContext context) {
     final hasPlan = authState.subscription.isEntitled;
+    final canUseIntroTrial = authState.subscription.canUseIntroTrial;
+    final showIntro = canUseIntroTrial && (plan?.hasIntroductoryOffer ?? true);
+
+    final heroTitle = hasPlan
+        ? 'You are covered.'
+        : showIntro
+        ? (plan?.introOfferHeadline ?? 'Special first-month pricing.')
+        : 'Monthly access for less.';
+
+    final introSummary =
+        plan?.introOfferSummary ??
+        'Start at a special intro price, then standard monthly billing through Razorpay Checkout.';
+    // The trial is monthly; nudge users toward the yearly pass shown below.
+    final introSummaryWithYearly = showYearlyHint
+        ? '${introSummary.replaceFirst(RegExp(r'\.$'), '')} — or save with the yearly pass below.'
+        : introSummary;
+
+    final heroSubtitle = hasPlan
+        ? 'Renewal health, payment retries and membership status stay synced with the backend.'
+        : showIntro
+        ? introSummaryWithYearly
+        : (plan?.regularSummary ??
+              'Continue with the regular monthly membership through Razorpay Checkout.');
 
     return Container(
       padding: const EdgeInsets.all(22),
@@ -758,9 +835,7 @@ class _HeroCard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                hasPlan
-                    ? 'You are covered.'
-                    : 'Fast recurring payments, handled right.',
+                heroTitle,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 28,
@@ -770,9 +845,7 @@ class _HeroCard extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text(
-                hasPlan
-                    ? 'Renewal health, payment retries and membership status stay synced with the backend.'
-                    : 'Create the subscription on your backend, collect the mandate with Razorpay Checkout, and let webhooks keep the app state accurate.',
+                heroSubtitle,
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.84),
                   fontSize: 13,
@@ -899,6 +972,14 @@ class _LiveStatusCard extends StatelessWidget {
                     ? 'Stops this cycle'
                     : 'Auto renew',
               ),
+              _StatusMetric(
+                label: 'Intro offer',
+                value: subscription.isIntroTrialActive
+                    ? 'First month active'
+                    : subscription.hasUsedIntroTrial
+                    ? 'Used'
+                    : 'Available',
+              ),
             ],
           ),
         ],
@@ -911,11 +992,13 @@ class _PlanCard extends StatelessWidget {
   const _PlanCard({
     required this.plan,
     required this.isSelected,
+    required this.showIntroOffer,
     required this.onTap,
   });
 
   final SubscriptionPlan plan;
   final bool isSelected;
+  final bool showIntroOffer;
   final VoidCallback onTap;
 
   Color _hexToColor(String hex) {
@@ -928,6 +1011,7 @@ class _PlanCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = _hexToColor(plan.accentColor);
     final surface = _hexToColor(plan.surfaceColor);
+    final useIntroOffer = showIntroOffer && plan.hasIntroductoryOffer;
 
     return GestureDetector(
       onTap: onTap,
@@ -1016,7 +1100,9 @@ class _PlanCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  plan.amountLabel,
+                  useIntroOffer
+                      ? plan.introductoryAmountLabel
+                      : plan.amountLabel,
                   style: const TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.w900,
@@ -1028,7 +1114,9 @@ class _PlanCard extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Text(
-                    '/ ${plan.periodLabel}',
+                    useIntroOffer
+                        ? '/ ${plan.introductoryPeriodLabel}'
+                        : '/ ${plan.periodLabel}',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey.shade700,
@@ -1040,7 +1128,7 @@ class _PlanCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              plan.billingLabel,
+              useIntroOffer ? plan.introductoryBillingLabel : plan.billingLabel,
               style: TextStyle(
                 color: Colors.grey.shade600,
                 fontSize: 12,

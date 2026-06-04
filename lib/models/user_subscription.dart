@@ -24,6 +24,12 @@ class UserSubscription {
   final DateTime? lastWebhookReceivedAt;
   final DateTime? lastSignatureVerifiedAt;
   final bool cancelAtCycleEnd;
+  final bool introTrialUsed;
+  final bool introTrialActive;
+  final DateTime? introTrialStartedAt;
+  final DateTime? introTrialEndsAt;
+  final int? introTrialAmountInPaise;
+  final int? recurringAmountInPaise;
   final DateTime? updatedAt;
 
   const UserSubscription({
@@ -52,6 +58,12 @@ class UserSubscription {
     this.lastWebhookReceivedAt,
     this.lastSignatureVerifiedAt,
     this.cancelAtCycleEnd = false,
+    this.introTrialUsed = false,
+    this.introTrialActive = false,
+    this.introTrialStartedAt,
+    this.introTrialEndsAt,
+    this.introTrialAmountInPaise,
+    this.recurringAmountInPaise,
     this.updatedAt,
   });
 
@@ -90,6 +102,12 @@ class UserSubscription {
       lastWebhookReceivedAt: _parseDate(payload['lastWebhookReceivedAt']),
       lastSignatureVerifiedAt: _parseDate(payload['lastSignatureVerifiedAt']),
       cancelAtCycleEnd: payload['cancelAtCycleEnd'] as bool? ?? false,
+      introTrialUsed: payload['introTrialUsed'] as bool? ?? false,
+      introTrialActive: payload['introTrialActive'] as bool? ?? false,
+      introTrialStartedAt: _parseDate(payload['introTrialStartedAt']),
+      introTrialEndsAt: _parseDate(payload['introTrialEndsAt']),
+      introTrialAmountInPaise: _asInt(payload['introTrialAmountInPaise']),
+      recurringAmountInPaise: _asInt(payload['recurringAmountInPaise']),
       updatedAt: _parseDate(payload['updatedAt']),
     );
   }
@@ -120,6 +138,12 @@ class UserSubscription {
     DateTime? lastWebhookReceivedAt,
     DateTime? lastSignatureVerifiedAt,
     bool? cancelAtCycleEnd,
+    bool? introTrialUsed,
+    bool? introTrialActive,
+    DateTime? introTrialStartedAt,
+    DateTime? introTrialEndsAt,
+    int? introTrialAmountInPaise,
+    int? recurringAmountInPaise,
     DateTime? updatedAt,
   }) {
     return UserSubscription(
@@ -150,6 +174,14 @@ class UserSubscription {
       lastSignatureVerifiedAt:
           lastSignatureVerifiedAt ?? this.lastSignatureVerifiedAt,
       cancelAtCycleEnd: cancelAtCycleEnd ?? this.cancelAtCycleEnd,
+      introTrialUsed: introTrialUsed ?? this.introTrialUsed,
+      introTrialActive: introTrialActive ?? this.introTrialActive,
+      introTrialStartedAt: introTrialStartedAt ?? this.introTrialStartedAt,
+      introTrialEndsAt: introTrialEndsAt ?? this.introTrialEndsAt,
+      introTrialAmountInPaise:
+          introTrialAmountInPaise ?? this.introTrialAmountInPaise,
+      recurringAmountInPaise:
+          recurringAmountInPaise ?? this.recurringAmountInPaise,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
@@ -212,6 +244,16 @@ class UserSubscription {
 
   DateTime? get nextBillingAt => currentEnd ?? chargeAt;
 
+  bool get hasUsedIntroTrial => introTrialUsed;
+
+  bool get isIntroTrialActive => introTrialActive;
+
+  bool get canUseIntroTrial =>
+      !introTrialUsed &&
+      paidCount == 0 &&
+      (lastPaymentId ?? '').isEmpty &&
+      (!hasSubscriptionId || status == 'created');
+
   static Map<String, dynamic> _resolvePayload(Map<String, dynamic> json) {
     final candidates = <Map<String, dynamic>>[
       json,
@@ -271,6 +313,10 @@ class UserSubscription {
     }
 
     if ((json['notes'] as Map?)?.isNotEmpty ?? false) {
+      score += 1;
+    }
+
+    if (json['introTrialUsed'] == true || json['introTrialActive'] == true) {
       score += 1;
     }
 

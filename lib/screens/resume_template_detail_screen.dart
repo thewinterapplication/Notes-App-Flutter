@@ -1,9 +1,8 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:pdfx/pdfx.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/resume_template.dart';
+import 'resume_templates_screen.dart' show PdfPreviewCache;
 
 class ResumeTemplateDetailScreen extends StatefulWidget {
   const ResumeTemplateDetailScreen({super.key, required this.template});
@@ -16,41 +15,44 @@ class ResumeTemplateDetailScreen extends StatefulWidget {
 
 class _ResumeTemplateDetailScreenState
     extends State<ResumeTemplateDetailScreen> {
-  Uint8List? _pdfPreview;
-  bool _loadingPreview = false;
-  bool _previewFailed = false;
+  PdfControllerPinch? _pdfController;
+  bool _loadingPdf = false;
+  bool _pdfFailed = false;
 
   @override
   void initState() {
     super.initState();
-    if (widget.template.isPdf && widget.template.thumbnailUrl.isEmpty) {
-      _loadPdfPreview();
-    }
+    if (widget.template.isPdf) _openPdf();
   }
 
-  Future<void> _loadPdfPreview() async {
-    setState(() => _loadingPreview = true);
+  @override
+  void dispose() {
+    _pdfController?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openPdf() async {
+    setState(() => _loadingPdf = true);
     try {
-      final response = await http.get(Uri.parse(widget.template.fileUrl))
-          .timeout(const Duration(seconds: 30));
-      if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
-      final doc = await PdfDocument.openData(response.bodyBytes);
-      final page = await doc.getPage(1);
-      final img = await page.render(
-        width: page.width,
-        height: page.height,
-        format: PdfPageImageFormat.png,
-        backgroundColor: '#FFFFFF',
+      final bytes = await PdfPreviewCache.fetch(widget.template.fileUrl);
+      final controller = PdfControllerPinch(
+        document: PdfDocument.openData(bytes),
       );
-      await page.close();
-      await doc.close();
-      if (mounted && img?.bytes != null) {
-        setState(() { _pdfPreview = img!.bytes; _loadingPreview = false; });
-      } else {
-        if (mounted) setState(() { _loadingPreview = false; _previewFailed = true; });
+      if (!mounted) {
+        controller.dispose();
+        return;
       }
-    } catch (_) {
-      if (mounted) setState(() { _loadingPreview = false; _previewFailed = true; });
+      setState(() {
+        _pdfController = controller;
+        _loadingPdf = false;
+      });
+    } catch (e) {
+      debugPrint('[ResumeTemplate] open PDF failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _loadingPdf = false;
+        _pdfFailed = true;
+      });
     }
   }
 
@@ -71,19 +73,41 @@ class _ResumeTemplateDetailScreenState
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: _buildPreview(template),
-      floatingActionButton: FloatingActionButton.extended(
+      body: _buildBody(template),
+      floatingActionButton: FloatingActionButton(
         onPressed: _download,
         backgroundColor: const Color(0xFFE85D04),
         foregroundColor: Colors.white,
-        icon: const Icon(Icons.download_rounded),
-        label: const Text('Download', style: TextStyle(fontWeight: FontWeight.w600)),
+        tooltip: 'Download',
+        child: const Icon(Icons.download_rounded),
       ),
     );
   }
 
-  Widget _buildPreview(ResumeTemplate template) {
-    // 1. Thumbnail URL provided — show network image
+  Widget _buildBody(ResumeTemplate template) {
+    if (template.isPdf) {
+      if (_loadingPdf) {
+        return const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 12),
+              Text('Loading preview…',
+                  style: TextStyle(color: Colors.grey, fontSize: 14)),
+            ],
+          ),
+        );
+      }
+      if (_pdfController != null) {
+        return PdfViewPinch(
+          controller: _pdfController!,
+          padding: 8,
+        );
+      }
+      if (_pdfFailed) return _fallbackPlaceholder(template);
+    }
+
     if (template.thumbnailUrl.isNotEmpty) {
       return InteractiveViewer(
         child: Center(
@@ -105,37 +129,6 @@ class _ResumeTemplateDetailScreenState
       );
     }
 
-    // 2. PDF — render first page
-    if (template.isPdf) {
-      if (_loadingPreview) {
-        return const Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 12),
-              Text('Loading preview…',
-                  style: TextStyle(color: Colors.grey, fontSize: 14)),
-            ],
-          ),
-        );
-      }
-      if (_pdfPreview != null) {
-        return InteractiveViewer(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.memory(_pdfPreview!, fit: BoxFit.contain),
-              ),
-            ),
-          ),
-        );
-      }
-    }
-
-    // 3. Fallback — icon placeholder
     return _fallbackPlaceholder(template);
   }
 

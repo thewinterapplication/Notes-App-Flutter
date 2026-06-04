@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/subscription_plan.dart';
 import '../models/user_subscription.dart';
 
 class SubscriptionBanner extends StatelessWidget {
@@ -6,10 +7,16 @@ class SubscriptionBanner extends StatelessWidget {
     super.key,
     required this.subscription,
     required this.onTap,
+    this.plan,
   });
 
   final UserSubscription subscription;
   final VoidCallback onTap;
+
+  /// The monthly plan carrying the intro offer, used to render live pricing.
+  /// May be null before plans have loaded; the banner then falls back to
+  /// price-free copy.
+  final SubscriptionPlan? plan;
 
   String _formatDate(DateTime date) {
     const months = [
@@ -33,12 +40,20 @@ class SubscriptionBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isActive = subscription.isEntitled;
-    final title = isActive ? 'Premium pass is live' : 'Unlock recurring access';
+    final title = isActive
+        ? subscription.isIntroTrialActive
+              ? 'First month access is live'
+              : 'Premium pass is live'
+        : 'Unlock recurring access';
     final subtitle = isActive
         ? subscription.nextBillingAt != null
               ? 'Next billing ${_formatDate(subscription.nextBillingAt!)}'
               : subscription.displayStatus
-        : 'UPI apps, cards, netbanking and wallets appear on Razorpay Checkout when enabled.';
+        : subscription.canUseIntroTrial
+        ? (plan?.introOfferSummary ??
+              'Start at a special intro price, then standard monthly billing through Razorpay Checkout.')
+        : (plan?.regularSummary ??
+              'Continue with the regular monthly membership through Razorpay Checkout.');
 
     return GestureDetector(
       onTap: onTap,
@@ -97,7 +112,9 @@ class SubscriptionBanner extends StatelessWidget {
                   ),
                   child: Text(
                     isActive
-                        ? subscription.displayStatus
+                        ? subscription.isIntroTrialActive
+                              ? 'Intro Month'
+                              : subscription.displayStatus
                         : 'Premium Membership',
                     style: const TextStyle(
                       color: Colors.white,

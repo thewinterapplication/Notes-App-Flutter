@@ -17,7 +17,10 @@ void main() {
       expect(subscription.status, 'active');
       expect(subscription.planCode, 'monthly');
       expect(subscription.subscriptionId, 'sub_SX573ETIpr1zvh');
-      expect(subscription.currentEnd, DateTime.parse('2026-04-28T18:30:00.000Z'));
+      expect(
+        subscription.currentEnd,
+        DateTime.parse('2026-04-28T18:30:00.000Z'),
+      );
       expect(subscription.isEntitled, isTrue);
     });
 
@@ -30,10 +33,7 @@ void main() {
         'paidCount': 1,
         'remainingCount': null,
         'totalCount': null,
-        'notes': {
-          'app_name': 'College Notes',
-          'app_plan_code': 'monthly',
-        },
+        'notes': {'app_name': 'College Notes', 'app_plan_code': 'monthly'},
         r'$__parent': {
           'subscription': {
             'planCode': 'monthly',
@@ -75,7 +75,46 @@ void main() {
         'currentEnd': {r'$date': '2026-04-28T18:30:00.000Z'},
       });
 
-      expect(subscription.currentEnd, DateTime.parse('2026-04-28T18:30:00.000Z'));
+      expect(
+        subscription.currentEnd,
+        DateTime.parse('2026-04-28T18:30:00.000Z'),
+      );
     });
+
+    test('parses intro trial flags', () {
+      final subscription = UserSubscription.fromJson({
+        'status': 'authenticated',
+        'introTrialUsed': true,
+        'introTrialActive': true,
+        'introTrialStartedAt': '2026-05-30T10:00:00.000Z',
+        'introTrialEndsAt': '2026-06-30T10:00:00.000Z',
+        'introTrialAmountInPaise': 100,
+        'recurringAmountInPaise': 3900,
+      });
+
+      expect(subscription.hasUsedIntroTrial, isTrue);
+      expect(subscription.isIntroTrialActive, isTrue);
+      expect(subscription.canUseIntroTrial, isFalse);
+      expect(subscription.introTrialAmountInPaise, 100);
+      expect(subscription.recurringAmountInPaise, 3900);
+      expect(
+        subscription.introTrialEndsAt,
+        DateTime.parse('2026-06-30T10:00:00.000Z'),
+      );
+    });
+
+    test(
+      'does not allow intro trial when prior subscription history exists',
+      () {
+        final subscription = UserSubscription.fromJson({
+          'status': 'cancelled',
+          'subscriptionId': 'sub_previous',
+          'paidCount': 1,
+        });
+
+        expect(subscription.hasUsedIntroTrial, isFalse);
+        expect(subscription.canUseIntroTrial, isFalse);
+      },
+    );
   });
 }

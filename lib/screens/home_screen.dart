@@ -9,6 +9,9 @@ import '../providers/pdf_provider.dart';
 import '../providers/subscription_provider.dart';
 import '../widgets/subscription_banner.dart';
 import 'course_subjects_screen.dart';
+import 'jntu_subjects_screen.dart';
+import 'jntu_courses_screen.dart';
+import 'upload_jntu_notes_screen.dart';
 import 'bookmarks_screen.dart';
 import 'subscription_screen.dart';
 import 'jobs_screen.dart';
@@ -254,18 +257,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
           const SizedBox(height: 24),
 
-          // Notes Section
+          // JNTU Syllabus Section — works like courses but from its own
+          // endpoints. Reachable only from the home screen.
           _buildSectionHeader(
-            'Notes',
-            onSeeAll: () => setState(() => _currentNavIndex = 1),
+            'JNTU Syllabus',
+            onSeeAll: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const JntuCoursesScreen(),
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           SizedBox(
             height: 160,
-            child: coursesAsync.when(
+            child: ref.watch(availableJntuCoursesProvider).when(
               data: (courses) => courses.isEmpty
                   ? _buildEmptyCoursesPlaceholder(
-                      'No courses available right now',
+                      'No JNTU syllabus available right now',
                     )
                   : ListView.builder(
                       scrollDirection: Axis.horizontal,
@@ -274,13 +283,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       itemBuilder: (context, index) {
                         return Padding(
                           padding: const EdgeInsets.only(right: 12),
-                          child: _buildHorizontalCourseCard(courses[index]),
+                          child: _buildHorizontalCourseCard(
+                            courses[index],
+                            isJntu: true,
+                          ),
                         );
                       },
                     ),
               loading: () => _buildSkeletonCards(),
               error: (_, __) => _buildEmptyCoursesPlaceholder(
-                'Unable to load courses',
+                'Unable to load JNTU syllabus',
               ),
             ),
           ),
@@ -318,6 +330,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   ],
             orElse: () => [],
           ),
+
+          // Notes Section
+          _buildSectionHeader(
+            'Notes',
+            onSeeAll: () => setState(() => _currentNavIndex = 1),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 160,
+            child: coursesAsync.when(
+              data: (courses) => courses.isEmpty
+                  ? _buildEmptyCoursesPlaceholder(
+                      'No courses available right now',
+                    )
+                  : ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: courses.length,
+                      itemBuilder: (context, index) {
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: _buildHorizontalCourseCard(courses[index]),
+                        );
+                      },
+                    ),
+              loading: () => _buildSkeletonCards(),
+              error: (_, __) => _buildEmptyCoursesPlaceholder(
+                'Unable to load courses',
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
         ],
       ),
     );
@@ -354,18 +399,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  Widget _buildHorizontalCourseCard(Course course, {bool isPYQ = false, bool isPlacement = false}) {
+  Widget _buildHorizontalCourseCard(Course course, {bool isPYQ = false, bool isPlacement = false, bool isJntu = false}) {
     final tabGradientColors = course.gradientColors.reversed.toList();
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => CourseSubjectsScreen(
-              course: course,
-              isPYQ: isPYQ,
-              isPlacement: isPlacement,
-            ),
+            builder: (context) => isJntu
+                ? JntuSubjectsScreen(course: course)
+                : CourseSubjectsScreen(
+                    course: course,
+                    isPYQ: isPYQ,
+                    isPlacement: isPlacement,
+                  ),
           ),
         );
       },
@@ -1117,6 +1164,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       );
                     },
                   ),
+                  const SizedBox(height: 8),
+                  _buildDrawerItem(
+                    Icons.upload_file_rounded,
+                    'Upload JNTU Syllabus',
+                    const Color(0xFF1565C0),
+                    () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const UploadJntuNotesScreen(),
+                        ),
+                      );
+                    },
+                  ),
                   // const SizedBox(height: 8),
                   // _buildDrawerItem(
                   //   Icons.upload_file_rounded,
@@ -1162,7 +1224,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       Navigator.pop(context);
                       launchUrl(
                         Uri.parse(
-                          'https://notes-app-server-wczw.onrender.com/privacy-policy',
+                          'https://notes.codebinary.in/privacy-policy',
                         ),
                       );
                     },

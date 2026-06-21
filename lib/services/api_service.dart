@@ -580,6 +580,114 @@ class ApiService {
     }
   }
 
+  /// Fetch courses from jntu-mappings and keep only courses with at least one subject
+  static Future<Map<String, dynamic>> getAvailableJntuCourses() async {
+    try {
+      final response = await _getWithRetry('$baseUrl/api/jntu-mappings');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final mappings =
+            (data['mappings'] as List? ?? const [])
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList();
+        const jntuGradientLoop = <List<Color>>[
+          [Color(0xFF1565C0), Color(0xFF0D47A1)],
+          [Color(0xFF00897B), Color(0xFF004D40)],
+          [Color(0xFF7B1FA2), Color(0xFF4A148C)],
+          [Color(0xFFE85D04), Color(0xFFD62828)],
+          [Color(0xFFE91E8C), Color(0xFFC2185B)],
+        ];
+        final filteredMappings =
+            mappings
+                .where(
+                  (mapping) =>
+                      (mapping['subjects'] as List? ?? const []).isNotEmpty,
+                )
+                .toList();
+
+        final courses =
+            List.generate(filteredMappings.length, (index) {
+              final mapping = filteredMappings[index];
+              final baseCourse = Course.fromAbbreviation(
+                (mapping['course'] as String? ?? '').trim(),
+              );
+              final gradientColors =
+                  jntuGradientLoop[index % jntuGradientLoop.length];
+
+              return Course(
+                id: baseCourse.id,
+                abbreviation: baseCourse.abbreviation,
+                fullName: baseCourse.fullName,
+                icon: baseCourse.icon,
+                gradientColors: gradientColors,
+              );
+            }).where((course) => course.abbreviation.isNotEmpty).toList();
+
+        return {'success': true, 'courses': courses};
+      } else {
+        return {'success': false, 'message': 'Failed to fetch JNTU courses'};
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Server is starting up. Please wait and try again.',
+      };
+    }
+  }
+
+  /// Fetch JNTU subjects for a course
+  static Future<Map<String, dynamic>> getJntuSubjectsByCourse(
+    String course,
+  ) async {
+    try {
+      final response = await _getWithRetry(
+        '$baseUrl/api/jntu/courses/${Uri.encodeComponent(course)}/subjects',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final subjects = List<String>.from(data['subjects'] ?? []);
+        return {'success': true, 'subjects': subjects};
+      } else {
+        return {'success': false, 'message': 'Failed to fetch JNTU subjects'};
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Server is starting up. Please wait and try again.',
+      };
+    }
+  }
+
+  /// Fetch JNTU files by course and subject
+  static Future<Map<String, dynamic>> getJntuFilesByCourseAndSubject(
+    String course,
+    String subject,
+  ) async {
+    try {
+      final response = await _getWithRetry(
+        '$baseUrl/api/jntu/courses/${Uri.encodeComponent(course)}/subjects/${Uri.encodeComponent(subject)}/files',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final files = (data['files'] as List)
+            .map((json) => PdfFile.fromJson(json))
+            .toList();
+        return {'success': true, 'files': files};
+      } else {
+        return {'success': false, 'message': 'Failed to fetch JNTU files'};
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Server is starting up. Please wait and try again.',
+      };
+    }
+  }
+
   /// Fetch PYQ subjects for a course
   static Future<Map<String, dynamic>> getPyqSubjectsByCourse(
     String course,
@@ -939,6 +1047,66 @@ class ApiService {
   }) async {
     try {
       final uri = Uri.parse('$baseUrl/upload');
+      final request = http.MultipartRequest('POST', uri);
+
+      // Add the file
+      final fileName = file.path.split(Platform.pathSeparator).last;
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'file',
+          file.path,
+          filename: fileName,
+          contentType: MediaType('application', 'pdf'),
+        ),
+      );
+
+      // Add form fields
+      request.fields['course'] = course;
+      request.fields['subject'] = subject;
+      request.fields['author'] = author.trim();
+      request.fields['accessType'] = accessType;
+      if (customFileName != null && customFileName.isNotEmpty) {
+        request.fields['customFileName'] = customFileName;
+      }
+
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 60),
+      );
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['error'] != null) {
+          return {'success': false, 'message': data['error']};
+        }
+        return {
+          'success': true,
+          'url': data['url'],
+          'fileName': data['fileName'],
+          'id': data['id'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Upload failed with status ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Upload failed: ${e.toString()}'};
+    }
+  }
+
+  /// Upload a JNTU syllabus PDF file
+  static Future<Map<String, dynamic>> uploadJntuFile({
+    required File file,
+    required String course,
+    required String subject,
+    required String author,
+    String? customFileName,
+    String accessType = 'free',
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/upload-jntu');
       final request = http.MultipartRequest('POST', uri);
 
       // Add the file

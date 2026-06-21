@@ -110,6 +110,39 @@ final placementFilesProvider = FutureProvider.family<List<PdfFile>, String>((ref
   }
 });
 
+/// Provider for fetching available JNTU courses from jntu-mappings
+final availableJntuCoursesProvider = FutureProvider<List<Course>>((ref) async {
+  final result = await ApiService.getAvailableJntuCourses();
+
+  if (result['success'] == true) {
+    return result['courses'] as List<Course>;
+  } else {
+    throw Exception(result['message'] ?? 'Failed to fetch JNTU courses');
+  }
+});
+
+/// Provider for fetching JNTU subjects by course
+final jntuSubjectsProvider = FutureProvider.family<List<String>, String>((ref, course) async {
+  final result = await ApiService.getJntuSubjectsByCourse(course);
+
+  if (result['success'] == true) {
+    return result['subjects'] as List<String>;
+  } else {
+    throw Exception(result['message'] ?? 'Failed to fetch JNTU subjects');
+  }
+});
+
+/// Provider for fetching JNTU files by course and subject
+final jntuFilesByCourseSubjectProvider = FutureProvider.family<List<PdfFile>, CourseSubjectParams>((ref, params) async {
+  final result = await ApiService.getJntuFilesByCourseAndSubject(params.course, params.subject);
+
+  if (result['success'] == true) {
+    return result['files'] as List<PdfFile>;
+  } else {
+    throw Exception(result['message'] ?? 'Failed to fetch JNTU files');
+  }
+});
+
 /// Provider for fetching PYQ subjects by course
 final pyqSubjectsProvider = FutureProvider.family<List<String>, String>((ref, course) async {
   final result = await ApiService.getPyqSubjectsByCourse(course);

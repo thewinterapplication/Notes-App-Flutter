@@ -55,6 +55,48 @@ class CourseSubjectParams {
   int get hashCode => course.hashCode ^ subject.hashCode;
 }
 
+class CourseSemesterParams {
+  final String course;
+  final String semester;
+
+  CourseSemesterParams({required this.course, required this.semester});
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CourseSemesterParams &&
+          runtimeType == other.runtimeType &&
+          course == other.course &&
+          semester == other.semester;
+
+  @override
+  int get hashCode => course.hashCode ^ semester.hashCode;
+}
+
+class CourseSemesterSubjectParams {
+  final String course;
+  final String semester;
+  final String subject;
+
+  CourseSemesterSubjectParams({
+    required this.course,
+    required this.semester,
+    required this.subject,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CourseSemesterSubjectParams &&
+          runtimeType == other.runtimeType &&
+          course == other.course &&
+          semester == other.semester &&
+          subject == other.subject;
+
+  @override
+  int get hashCode => course.hashCode ^ semester.hashCode ^ subject.hashCode;
+}
+
 /// Provider for fetching PDF files by course and subject
 final pdfFilesByCourseSubjectProvider = FutureProvider.family<List<PdfFile>, CourseSubjectParams>((ref, params) async {
   final result = await ApiService.getFilesByCourseAndSubject(params.course, params.subject);
@@ -121,9 +163,20 @@ final availableJntuCoursesProvider = FutureProvider<List<Course>>((ref) async {
   }
 });
 
-/// Provider for fetching JNTU subjects by course
-final jntuSubjectsProvider = FutureProvider.family<List<String>, String>((ref, course) async {
-  final result = await ApiService.getJntuSubjectsByCourse(course);
+/// Provider for fetching JNTU semesters by course
+final jntuSemestersProvider = FutureProvider.family<List<String>, String>((ref, course) async {
+  final result = await ApiService.getJntuSemestersByCourse(course);
+
+  if (result['success'] == true) {
+    return result['semesters'] as List<String>;
+  } else {
+    throw Exception(result['message'] ?? 'Failed to fetch JNTU semesters');
+  }
+});
+
+/// Provider for fetching JNTU subjects by course and semester
+final jntuSubjectsProvider = FutureProvider.family<List<String>, CourseSemesterParams>((ref, params) async {
+  final result = await ApiService.getJntuSubjectsByCourseAndSemester(params.course, params.semester);
 
   if (result['success'] == true) {
     return result['subjects'] as List<String>;
@@ -132,9 +185,13 @@ final jntuSubjectsProvider = FutureProvider.family<List<String>, String>((ref, c
   }
 });
 
-/// Provider for fetching JNTU files by course and subject
-final jntuFilesByCourseSubjectProvider = FutureProvider.family<List<PdfFile>, CourseSubjectParams>((ref, params) async {
-  final result = await ApiService.getJntuFilesByCourseAndSubject(params.course, params.subject);
+/// Provider for fetching JNTU files by course, semester and subject
+final jntuFilesByCourseSubjectProvider = FutureProvider.family<List<PdfFile>, CourseSemesterSubjectParams>((ref, params) async {
+  final result = await ApiService.getJntuFilesByCourseSemesterAndSubject(
+    params.course,
+    params.semester,
+    params.subject,
+  );
 
   if (result['success'] == true) {
     return result['files'] as List<PdfFile>;

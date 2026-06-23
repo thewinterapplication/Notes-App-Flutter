@@ -637,13 +637,38 @@ class ApiService {
     }
   }
 
-  /// Fetch JNTU subjects for a course
-  static Future<Map<String, dynamic>> getJntuSubjectsByCourse(
+  /// Fetch JNTU semesters for a course
+  static Future<Map<String, dynamic>> getJntuSemestersByCourse(
     String course,
   ) async {
     try {
       final response = await _getWithRetry(
-        '$baseUrl/api/jntu/courses/${Uri.encodeComponent(course)}/subjects',
+        '$baseUrl/api/jntu/courses/${Uri.encodeComponent(course)}/semesters',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final semesters = List<String>.from(data['semesters'] ?? []);
+        return {'success': true, 'semesters': semesters};
+      } else {
+        return {'success': false, 'message': 'Failed to fetch JNTU semesters'};
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Server is starting up. Please wait and try again.',
+      };
+    }
+  }
+
+  /// Fetch JNTU subjects for a course and semester
+  static Future<Map<String, dynamic>> getJntuSubjectsByCourseAndSemester(
+    String course,
+    String semester,
+  ) async {
+    try {
+      final response = await _getWithRetry(
+        '$baseUrl/api/jntu/courses/${Uri.encodeComponent(course)}/semesters/${Uri.encodeComponent(semester)}/subjects',
       );
 
       if (response.statusCode == 200) {
@@ -661,14 +686,15 @@ class ApiService {
     }
   }
 
-  /// Fetch JNTU files by course and subject
-  static Future<Map<String, dynamic>> getJntuFilesByCourseAndSubject(
+  /// Fetch JNTU files by course, semester and subject
+  static Future<Map<String, dynamic>> getJntuFilesByCourseSemesterAndSubject(
     String course,
+    String semester,
     String subject,
   ) async {
     try {
       final response = await _getWithRetry(
-        '$baseUrl/api/jntu/courses/${Uri.encodeComponent(course)}/subjects/${Uri.encodeComponent(subject)}/files',
+        '$baseUrl/api/jntu/courses/${Uri.encodeComponent(course)}/semesters/${Uri.encodeComponent(semester)}/subjects/${Uri.encodeComponent(subject)}/files',
       );
 
       if (response.statusCode == 200) {
@@ -1100,6 +1126,7 @@ class ApiService {
   static Future<Map<String, dynamic>> uploadJntuFile({
     required File file,
     required String course,
+    required String semester,
     required String subject,
     required String author,
     String? customFileName,
@@ -1122,6 +1149,7 @@ class ApiService {
 
       // Add form fields
       request.fields['course'] = course;
+      request.fields['semester'] = semester;
       request.fields['subject'] = subject;
       request.fields['author'] = author.trim();
       request.fields['accessType'] = accessType;

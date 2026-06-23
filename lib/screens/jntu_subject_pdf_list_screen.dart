@@ -9,11 +9,13 @@ import 'pdf_detail_screen.dart';
 /// Mirrors [SubjectPdfListScreen] but reads from the JNTU endpoints.
 class JntuSubjectPdfListScreen extends ConsumerStatefulWidget {
   final Course course;
+  final String semester;
   final String subject;
 
   const JntuSubjectPdfListScreen({
     super.key,
     required this.course,
+    required this.semester,
     required this.subject,
   });
 
@@ -26,6 +28,7 @@ class _JntuSubjectPdfListScreenState extends ConsumerState<JntuSubjectPdfListScr
   String _searchQuery = '';
 
   Course get course => widget.course;
+  String get semester => widget.semester;
   String get subject => widget.subject;
 
   @override
@@ -48,7 +51,11 @@ class _JntuSubjectPdfListScreenState extends ConsumerState<JntuSubjectPdfListScr
 
   @override
   Widget build(BuildContext context) {
-    final params = CourseSubjectParams(course: course.abbreviation, subject: subject);
+    final params = CourseSemesterSubjectParams(
+      course: course.abbreviation,
+      semester: semester,
+      subject: subject,
+    );
     final pdfFilesAsync = ref.watch(jntuFilesByCourseSubjectProvider(params));
 
     return Scaffold(
@@ -108,7 +115,7 @@ class _JntuSubjectPdfListScreenState extends ConsumerState<JntuSubjectPdfListScr
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              'JNTU · ${course.abbreviation} - ${course.fullName}',
+                              'JNTU · ${course.abbreviation} · $semester',
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.8),
                                 fontSize: 12,

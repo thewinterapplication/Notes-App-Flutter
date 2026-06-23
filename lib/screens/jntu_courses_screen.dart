@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/course.dart';
 import '../providers/pdf_provider.dart';
-import 'jntu_subjects_screen.dart';
+import 'jntu_semesters_screen.dart';
 
 /// Full-screen list of JNTU syllabus courses, reached via "See All" from the
 /// home screen. Mirrors the Courses tab layout but uses the JNTU endpoints.
@@ -198,7 +198,7 @@ class _JntuCoursesScreenState extends ConsumerState<JntuCoursesScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => JntuSubjectsScreen(course: course),
+            builder: (context) => JntuSemestersScreen(course: course),
           ),
         );
       },

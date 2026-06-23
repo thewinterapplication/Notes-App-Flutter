@@ -9,7 +9,7 @@ import '../providers/pdf_provider.dart';
 import '../providers/subscription_provider.dart';
 import '../widgets/subscription_banner.dart';
 import 'course_subjects_screen.dart';
-import 'jntu_subjects_screen.dart';
+import 'jntu_semesters_screen.dart';
 import 'jntu_courses_screen.dart';
 import 'upload_jntu_notes_screen.dart';
 import 'bookmarks_screen.dart';
@@ -407,7 +407,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           context,
           MaterialPageRoute(
             builder: (context) => isJntu
-                ? JntuSubjectsScreen(course: course)
+                ? JntuSemestersScreen(course: course)
                 : CourseSubjectsScreen(
                     course: course,
                     isPYQ: isPYQ,

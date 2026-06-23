@@ -2,25 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/course.dart';
 import '../providers/pdf_provider.dart';
-import 'jntu_subject_pdf_list_screen.dart';
+import 'jntu_subjects_screen.dart';
 
-/// Screen to display JNTU syllabus subjects for a specific course.
-/// Mirrors [CourseSubjectsScreen] but reads from the JNTU endpoints.
-class JntuSubjectsScreen extends ConsumerStatefulWidget {
+/// Screen to display JNTU syllabus semesters for a specific course.
+/// Sits between [JntuCoursesScreen] and [JntuSubjectsScreen] in the
+/// course -> semester -> subject -> book navigation flow.
+class JntuSemestersScreen extends ConsumerStatefulWidget {
   final Course course;
-  final String semester;
 
-  const JntuSubjectsScreen({
-    super.key,
-    required this.course,
-    required this.semester,
-  });
+  const JntuSemestersScreen({super.key, required this.course});
 
   @override
-  ConsumerState<JntuSubjectsScreen> createState() => _JntuSubjectsScreenState();
+  ConsumerState<JntuSemestersScreen> createState() => _JntuSemestersScreenState();
 }
 
-class _JntuSubjectsScreenState extends ConsumerState<JntuSubjectsScreen> {
+class _JntuSemestersScreenState extends ConsumerState<JntuSemestersScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -38,7 +34,6 @@ class _JntuSubjectsScreenState extends ConsumerState<JntuSubjectsScreen> {
   ];
 
   Course get course => widget.course;
-  String get semester => widget.semester;
 
   @override
   void dispose() {
@@ -48,8 +43,7 @@ class _JntuSubjectsScreenState extends ConsumerState<JntuSubjectsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final params = CourseSemesterParams(course: course.abbreviation, semester: semester);
-    final subjectsAsync = ref.watch(jntuSubjectsProvider(params));
+    final semestersAsync = ref.watch(jntuSemestersProvider(course.abbreviation));
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -107,7 +101,7 @@ class _JntuSubjectsScreenState extends ConsumerState<JntuSubjectsScreen> {
                               ),
                             ),
                             Text(
-                              'JNTU Syllabus · $semester',
+                              'JNTU Syllabus · ${course.fullName}',
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.8),
                                 fontSize: 13,
@@ -136,7 +130,7 @@ class _JntuSubjectsScreenState extends ConsumerState<JntuSubjectsScreen> {
                       onChanged: (value) => setState(() => _searchQuery = value),
                       style: const TextStyle(fontSize: 15),
                       decoration: InputDecoration(
-                        hintText: 'Search subjects...',
+                        hintText: 'Search semesters...',
                         hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 15),
                         prefixIcon: Padding(
                           padding: const EdgeInsets.only(left: 16, right: 8),
@@ -175,7 +169,7 @@ class _JntuSubjectsScreenState extends ConsumerState<JntuSubjectsScreen> {
             ),
             // Content
             Expanded(
-              child: subjectsAsync.when(
+              child: semestersAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, stack) => Center(
                   child: Column(
@@ -184,20 +178,20 @@ class _JntuSubjectsScreenState extends ConsumerState<JntuSubjectsScreen> {
                       Icon(Icons.folder_open, size: 64, color: Colors.grey.shade400),
                       const SizedBox(height: 16),
                       Text(
-                        'No subjects found',
+                        'No semesters found',
                         style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
                       ),
                       const SizedBox(height: 24),
                       ElevatedButton.icon(
-                        onPressed: () => ref.invalidate(jntuSubjectsProvider(params)),
+                        onPressed: () => ref.invalidate(jntuSemestersProvider(course.abbreviation)),
                         icon: const Icon(Icons.refresh),
                         label: const Text('Retry'),
                       ),
                     ],
                   ),
                 ),
-                data: (subjects) {
-                  if (subjects.isEmpty) {
+                data: (semesters) {
+                  if (semesters.isEmpty) {
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -205,7 +199,7 @@ class _JntuSubjectsScreenState extends ConsumerState<JntuSubjectsScreen> {
                           Icon(Icons.folder_open, size: 64, color: Colors.grey.shade400),
                           const SizedBox(height: 16),
                           Text(
-                            'No subjects found',
+                            'No semesters found',
                             style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
                           ),
                         ],
@@ -214,15 +208,15 @@ class _JntuSubjectsScreenState extends ConsumerState<JntuSubjectsScreen> {
                   }
 
                   final filtered = _searchQuery.isEmpty
-                      ? subjects
-                      : subjects.where((s) =>
+                      ? semesters
+                      : semesters.where((s) =>
                           s.toLowerCase().contains(_searchQuery.toLowerCase())
                         ).toList();
 
                   if (filtered.isEmpty) {
                     return Center(
                       child: Text(
-                        'No subjects found',
+                        'No semesters found',
                         style: TextStyle(color: Colors.grey.shade500, fontSize: 16),
                       ),
                     );
@@ -230,9 +224,9 @@ class _JntuSubjectsScreenState extends ConsumerState<JntuSubjectsScreen> {
 
                   return RefreshIndicator(
                     onRefresh: () async {
-                      ref.invalidate(jntuSubjectsProvider(params));
+                      ref.invalidate(jntuSemestersProvider(course.abbreviation));
                     },
-                    child: _buildSubjectList(context, filtered),
+                    child: _buildSemesterList(context, filtered),
                   );
                 },
               ),
@@ -243,7 +237,7 @@ class _JntuSubjectsScreenState extends ConsumerState<JntuSubjectsScreen> {
     );
   }
 
-  Widget _buildSubjectList(BuildContext context, List<String> subjects) {
+  Widget _buildSemesterList(BuildContext context, List<String> semesters) {
     final width = MediaQuery.of(context).size.width;
     final isWideScreen = width >= 600;
     final crossAxisCount = width >= 1200 ? 3 : width >= 800 ? 2 : 1;
@@ -252,11 +246,11 @@ class _JntuSubjectsScreenState extends ConsumerState<JntuSubjectsScreen> {
     if (crossAxisCount == 1) {
       return ListView.builder(
         padding: EdgeInsets.all(padding),
-        itemCount: subjects.length,
+        itemCount: semesters.length,
         itemBuilder: (context, index) {
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: _buildSubjectCard(context, subjects[index], index),
+            child: _buildSemesterCard(context, semesters[index], index),
           );
         },
       );
@@ -270,24 +264,23 @@ class _JntuSubjectsScreenState extends ConsumerState<JntuSubjectsScreen> {
         mainAxisSpacing: 12,
         mainAxisExtent: 120,
       ),
-      itemCount: subjects.length,
+      itemCount: semesters.length,
       itemBuilder: (context, index) {
-        return _buildSubjectCard(context, subjects[index], index);
+        return _buildSemesterCard(context, semesters[index], index);
       },
     );
   }
 
-  Widget _buildSubjectCard(BuildContext context, String subject, int index) {
+  Widget _buildSemesterCard(BuildContext context, String semester, int index) {
     final gradientColors = _tileGradients[index % _tileGradients.length];
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => JntuSubjectPdfListScreen(
+            builder: (context) => JntuSubjectsScreen(
               course: course,
               semester: semester,
-              subject: subject,
             ),
           ),
         );
@@ -317,7 +310,7 @@ class _JntuSubjectsScreenState extends ConsumerState<JntuSubjectsScreen> {
               bottom: 0,
               child: Center(
                 child: Icon(
-                  Icons.book,
+                  Icons.calendar_today,
                   size: 100,
                   color: Colors.white.withOpacity(0.15),
                 ),
@@ -329,10 +322,10 @@ class _JntuSubjectsScreenState extends ConsumerState<JntuSubjectsScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.book, color: Colors.white, size: 28),
+                    const Icon(Icons.calendar_today, color: Colors.white, size: 28),
                     const SizedBox(height: 8),
                     Text(
-                      subject,
+                      semester,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,

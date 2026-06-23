@@ -16,16 +16,20 @@ class UploadJntuNotesScreen extends StatefulWidget {
 class _UploadJntuNotesScreenState extends State<UploadJntuNotesScreen> {
   File? _selectedFile;
   String? _selectedCourse;
+  String? _selectedSemester;
   String? _selectedSubject;
   final TextEditingController _customFileNameController = TextEditingController();
   final TextEditingController _authorNameController = TextEditingController();
+  final TextEditingController _newSemesterController = TextEditingController();
   final TextEditingController _newSubjectController = TextEditingController();
   String _selectedAccessType = 'free';
 
   bool _isLoading = false;
   bool _isLoadingCourses = true;
+  bool _isLoadingSemesters = false;
   bool _isLoadingSubjects = false;
   List<Course> _courses = [];
+  List<String> _semesters = [];
   List<String> _subjects = [];
 
   @override
@@ -38,6 +42,7 @@ class _UploadJntuNotesScreenState extends State<UploadJntuNotesScreen> {
   void dispose() {
     _customFileNameController.dispose();
     _authorNameController.dispose();
+    _newSemesterController.dispose();
     _newSubjectController.dispose();
     super.dispose();
   }
@@ -58,7 +63,9 @@ class _UploadJntuNotesScreenState extends State<UploadJntuNotesScreen> {
         if (_selectedCourse != null &&
             !_courses.any((course) => course.abbreviation == _selectedCourse)) {
           _selectedCourse = null;
+          _selectedSemester = null;
           _selectedSubject = null;
+          _semesters = [];
           _subjects = [];
         }
       } else {
@@ -84,14 +91,37 @@ class _UploadJntuNotesScreenState extends State<UploadJntuNotesScreen> {
     }
   }
 
-  Future<void> _loadSubjects(String course) async {
+  Future<void> _loadSemesters(String course) async {
+    setState(() {
+      _isLoadingSemesters = true;
+      _semesters = [];
+      _selectedSemester = null;
+      _subjects = [];
+      _selectedSubject = null;
+    });
+
+    final result = await ApiService.getJntuSemestersByCourse(course);
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingSemesters = false;
+      if (result['success'] == true) {
+        _semesters = List<String>.from(result['semesters'] ?? []);
+      }
+    });
+  }
+
+  Future<void> _loadSubjects(String course, String semester) async {
     setState(() {
       _isLoadingSubjects = true;
       _subjects = [];
       _selectedSubject = null;
     });
 
-    final result = await ApiService.getJntuSubjectsByCourse(course);
+    final result = await ApiService.getJntuSubjectsByCourseAndSemester(course, semester);
+
+    if (!mounted) return;
 
     setState(() {
       _isLoadingSubjects = false;
@@ -99,6 +129,57 @@ class _UploadJntuNotesScreenState extends State<UploadJntuNotesScreen> {
         _subjects = List<String>.from(result['subjects'] ?? []);
       }
     });
+  }
+
+  void _showAddSemesterDialog() {
+    _newSemesterController.clear();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Add New Semester'),
+        content: TextField(
+          controller: _newSemesterController,
+          decoration: InputDecoration(
+            hintText: 'Enter semester name (e.g. 1-1)',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          textCapitalization: TextCapitalization.characters,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final newSemester = _newSemesterController.text.trim();
+              if (newSemester.isNotEmpty) {
+                setState(() {
+                  if (!_semesters.contains(newSemester)) {
+                    _semesters.add(newSemester);
+                  }
+                  _selectedSemester = newSemester;
+                  _subjects = [];
+                  _selectedSubject = null;
+                });
+                Navigator.pop(context);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2D3E50),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Add', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showAddSubjectDialog() {
@@ -159,6 +240,10 @@ class _UploadJntuNotesScreenState extends State<UploadJntuNotesScreen> {
       _showSnackBar('Please select a course', isError: true);
       return;
     }
+    if (_selectedSemester == null) {
+      _showSnackBar('Please select or add a semester', isError: true);
+      return;
+    }
     if (_selectedSubject == null) {
       _showSnackBar('Please select or add a subject', isError: true);
       return;
@@ -173,6 +258,7 @@ class _UploadJntuNotesScreenState extends State<UploadJntuNotesScreen> {
     final result = await ApiService.uploadJntuFile(
       file: _selectedFile!,
       course: _selectedCourse!,
+      semester: _selectedSemester!,
       subject: _selectedSubject!,
       author: _authorNameController.text.trim(),
       customFileName: _customFileNameController.text.trim(),
@@ -372,9 +458,72 @@ class _UploadJntuNotesScreenState extends State<UploadJntuNotesScreen> {
                     _selectedCourse = value;
                   });
                   if (value != null) {
-                    _loadSubjects(value);
+                    _loadSemesters(value);
                   }
                 },
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            _buildSectionCard(
+              title: 'Select Semester',
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _isLoadingSemesters
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(14),
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                          )
+                        : DropdownButtonFormField<String>(
+                            value: _selectedSemester,
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            ),
+                            hint: Text(
+                              _selectedCourse == null
+                                  ? 'Select a course first'
+                                  : _semesters.isEmpty
+                                      ? 'No semesters - add one'
+                                      : 'Choose a semester',
+                            ),
+                            items: _semesters.map((semester) {
+                              return DropdownMenuItem(
+                                value: semester,
+                                child: Text(semester),
+                              );
+                            }).toList(),
+                            onChanged: _selectedCourse == null
+                                ? null
+                                : (value) {
+                                    setState(() {
+                                      _selectedSemester = value;
+                                    });
+                                    if (value != null) {
+                                      _loadSubjects(_selectedCourse!, value);
+                                    }
+                                  },
+                          ),
+                  ),
+                  const SizedBox(width: 12),
+                  IconButton(
+                    onPressed: _selectedCourse == null ? null : _showAddSemesterDialog,
+                    icon: const Icon(Icons.add_circle_outline),
+                    color: const Color(0xFF2D3E50),
+                    iconSize: 32,
+                    tooltip: 'Add new semester',
+                  ),
+                ],
               ),
             ),
 
@@ -407,8 +556,8 @@ class _UploadJntuNotesScreenState extends State<UploadJntuNotesScreen> {
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                                 ),
                                 hint: Text(
-                                  _selectedCourse == null
-                                      ? 'Select a course first'
+                                  _selectedSemester == null
+                                      ? 'Select a semester first'
                                       : _subjects.isEmpty
                                           ? 'No subjects - add one'
                                           : 'Choose a subject',
@@ -419,7 +568,7 @@ class _UploadJntuNotesScreenState extends State<UploadJntuNotesScreen> {
                                     child: Text(subject),
                                   );
                                 }).toList(),
-                                onChanged: _selectedCourse == null
+                                onChanged: _selectedSemester == null
                                     ? null
                                     : (value) {
                                         setState(() {
@@ -430,7 +579,7 @@ class _UploadJntuNotesScreenState extends State<UploadJntuNotesScreen> {
                       ),
                       const SizedBox(width: 12),
                       IconButton(
-                        onPressed: _selectedCourse == null ? null : _showAddSubjectDialog,
+                        onPressed: _selectedSemester == null ? null : _showAddSubjectDialog,
                         icon: const Icon(Icons.add_circle_outline),
                         color: const Color(0xFF2D3E50),
                         iconSize: 32,

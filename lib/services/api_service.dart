@@ -603,7 +603,12 @@ class ApiService {
             mappings
                 .where(
                   (mapping) =>
-                      (mapping['subjects'] as List? ?? const []).isNotEmpty,
+                      (mapping['semesters'] as List? ?? const []).any(
+                        (semester) =>
+                            ((semester as Map?)?['subjects'] as List? ??
+                                    const [])
+                                .isNotEmpty,
+                      ),
                 )
                 .toList();
 
@@ -834,6 +839,19 @@ class ApiService {
       // Best-effort; the local token is cleared regardless.
     }
     await clearSessionToken();
+  }
+
+  /// Register/refresh this device's FCM token so the backend can send it
+  /// broadcast push notifications. Best-effort — failures are swallowed so
+  /// they never block login.
+  static Future<void> registerFcmToken(String fcmToken) async {
+    try {
+      await _postWithRetry('$baseUrl/api/fcm/register-token', {
+        'token': fcmToken,
+      });
+    } catch (_) {
+      // Best-effort; a token-refresh retry will happen on the next app open.
+    }
   }
 
   /// Fetch subscription plans configured on the backend

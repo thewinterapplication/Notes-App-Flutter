@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "831402540352",
+    "project_id": "college-notes-1500",
+    "storage_bucket": "college-notes-1500.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:831402540352:android:9ea5358a604d704713cea5",
+        "android_client_info": {
+          "package_name": "com.college.notes"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC9oTyjQ2p0A7DFfwCbuprpeStba-a6JSc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -11,7 +11,6 @@ import '../widgets/subscription_banner.dart';
 import 'course_subjects_screen.dart';
 import 'jntu_semesters_screen.dart';
 import 'jntu_courses_screen.dart';
-import 'upload_jntu_notes_screen.dart';
 import 'bookmarks_screen.dart';
 import 'subscription_screen.dart';
 import 'jobs_screen.dart';
@@ -271,65 +270,69 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           const SizedBox(height: 12),
           SizedBox(
             height: 160,
-            child: ref.watch(availableJntuCoursesProvider).when(
-              data: (courses) => courses.isEmpty
-                  ? _buildEmptyCoursesPlaceholder(
-                      'No JNTU syllabus available right now',
-                    )
-                  : ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: courses.length,
-                      itemBuilder: (context, index) {
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: _buildHorizontalCourseCard(
-                            courses[index],
-                            isJntu: true,
-                          ),
-                        );
-                      },
-                    ),
-              loading: () => _buildSkeletonCards(),
-              error: (_, __) => _buildEmptyCoursesPlaceholder(
-                'Unable to load JNTU syllabus',
-              ),
-            ),
+            child: ref
+                .watch(availableJntuCoursesProvider)
+                .when(
+                  data: (courses) => courses.isEmpty
+                      ? _buildEmptyCoursesPlaceholder(
+                          'No JNTU syllabus available right now',
+                        )
+                      : ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: courses.length,
+                          itemBuilder: (context, index) {
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 12),
+                              child: _buildHorizontalCourseCard(
+                                courses[index],
+                                isJntu: true,
+                              ),
+                            );
+                          },
+                        ),
+                  loading: () => _buildSkeletonCards(),
+                  error: (_, __) => _buildEmptyCoursesPlaceholder(
+                    'Unable to load JNTU syllabus',
+                  ),
+                ),
           ),
 
           const SizedBox(height: 24),
 
           // Placements Section — only shown when courses are available
-          ...ref.watch(availablePlacementCoursesProvider).maybeWhen(
-            data: (placementCourses) => placementCourses.isEmpty
-                ? []
-                : [
-                    _buildSectionHeader(
-                      'Placements',
-                      onSeeAll: () => setState(() => _currentNavIndex = 2),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      height: 160,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: placementCourses.length,
-                        itemBuilder: (context, index) {
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 12),
-                            child: _buildHorizontalCourseCard(
-                              placementCourses[index],
-                              isPlacement: true,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-            orElse: () => [],
-          ),
+          ...ref
+              .watch(availablePlacementCoursesProvider)
+              .maybeWhen(
+                data: (placementCourses) => placementCourses.isEmpty
+                    ? []
+                    : [
+                        _buildSectionHeader(
+                          'Placements',
+                          onSeeAll: () => setState(() => _currentNavIndex = 2),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 160,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: placementCourses.length,
+                            itemBuilder: (context, index) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 12),
+                                child: _buildHorizontalCourseCard(
+                                  placementCourses[index],
+                                  isPlacement: true,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                orElse: () => [],
+              ),
 
           // Notes Section
           _buildSectionHeader(
@@ -356,9 +359,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       },
                     ),
               loading: () => _buildSkeletonCards(),
-              error: (_, __) => _buildEmptyCoursesPlaceholder(
-                'Unable to load courses',
-              ),
+              error: (_, __) =>
+                  _buildEmptyCoursesPlaceholder('Unable to load courses'),
             ),
           ),
 
@@ -399,7 +401,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  Widget _buildHorizontalCourseCard(Course course, {bool isPYQ = false, bool isPlacement = false, bool isJntu = false}) {
+  Widget _buildHorizontalCourseCard(
+    Course course, {
+    bool isPYQ = false,
+    bool isPlacement = false,
+    bool isJntu = false,
+  }) {
     final tabGradientColors = course.gradientColors.reversed.toList();
     return GestureDetector(
       onTap: () {
@@ -523,10 +530,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   void _showSearchBottomSheet(BuildContext context) {
     String searchQuery = '';
-    final availableCourses = ref.read(availableCoursesProvider).maybeWhen(
-          data: (courses) => courses,
-          orElse: () => Course.allCourses,
-        );
+    final availableCourses = ref
+        .read(availableCoursesProvider)
+        .maybeWhen(data: (courses) => courses, orElse: () => Course.allCourses);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -587,8 +593,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       itemCount: filtered.length,
                       itemBuilder: (context, index) {
                         final course = filtered[index];
-                        final tabGradientColors =
-                            course.gradientColors.reversed.toList();
+                        final tabGradientColors = course.gradientColors.reversed
+                            .toList();
                         return ListTile(
                           leading: Container(
                             padding: const EdgeInsets.all(8),
@@ -667,16 +673,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       (courses) => _coursesSearchQuery.isEmpty
           ? courses
           : courses
-              .where(
-                (c) =>
-                    c.fullName.toLowerCase().contains(
-                      _coursesSearchQuery.toLowerCase(),
-                    ) ||
-                    c.abbreviation.toLowerCase().contains(
-                      _coursesSearchQuery.toLowerCase(),
-                    ),
-              )
-              .toList(),
+                .where(
+                  (c) =>
+                      c.fullName.toLowerCase().contains(
+                        _coursesSearchQuery.toLowerCase(),
+                      ) ||
+                      c.abbreviation.toLowerCase().contains(
+                        _coursesSearchQuery.toLowerCase(),
+                      ),
+                )
+                .toList(),
     );
 
     return Container(
@@ -833,10 +839,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               error: (_, __) => Center(
                 child: Text(
                   'Unable to load courses',
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 16,
-                  ),
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 16),
                 ),
               ),
             ),
@@ -931,10 +934,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         child: Text(
           message,
           textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Colors.grey.shade500,
-            fontSize: 15,
-          ),
+          style: TextStyle(color: Colors.grey.shade500, fontSize: 15),
         ),
       ),
     );
@@ -1164,21 +1164,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       );
                     },
                   ),
-                  const SizedBox(height: 8),
-                  _buildDrawerItem(
-                    Icons.upload_file_rounded,
-                    'Upload JNTU Syllabus',
-                    const Color(0xFF1565C0),
-                    () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const UploadJntuNotesScreen(),
-                        ),
-                      );
-                    },
-                  ),
+                  // const SizedBox(height: 8),
+                  // _buildDrawerItem(
+                  //   Icons.upload_file_rounded,
+                  //   'Upload JNTU Syllabus',
+                  //   const Color(0xFF1565C0),
+                  //   () {
+                  //     Navigator.pop(context);
+                  //     Navigator.push(
+                  //       context,
+                  //       MaterialPageRoute(
+                  //         builder: (context) => const UploadJntuNotesScreen(),
+                  //       ),
+                  //     );
+                  //   },
+                  // ),
                   // const SizedBox(height: 8),
                   // _buildDrawerItem(
                   //   Icons.upload_file_rounded,
@@ -1223,9 +1223,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     () {
                       Navigator.pop(context);
                       launchUrl(
-                        Uri.parse(
-                          'https://notes.codebinary.in/privacy-policy',
-                        ),
+                        Uri.parse('https://notes.codebinary.in/privacy-policy'),
                       );
                     },
                   ),
@@ -1301,9 +1299,10 @@ class _SkeletonCardState extends State<_SkeletonCard>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat();
-    _animation = Tween<double>(begin: -1.0, end: 2.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _animation = Tween<double>(
+      begin: -1.0,
+      end: 2.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
     _controller.addListener(() {
       if (mounted) setState(() {});
     });

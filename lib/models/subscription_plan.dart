@@ -135,6 +135,28 @@ class SubscriptionPlan {
     return 'first $days days';
   }
 
+  /// [introductoryPeriodLabel] with its first letter capitalized, e.g.
+  /// "First week", "First month" — for use at the start of a sentence.
+  String get introductoryPeriodLabelCapitalized {
+    final label = introductoryPeriodLabel;
+    return '${label[0].toUpperCase()}${label.substring(1)}';
+  }
+
+  /// Short pill/badge label for the intro period, e.g. "Intro Week",
+  /// "Intro Month", "Intro 2 Weeks" — derived from [introductoryPeriodLabel].
+  String get introBadgeLabel {
+    final noun = introductoryPeriodLabel.replaceFirst('first ', '');
+    final titleCased = noun
+        .split(' ')
+        .map(
+          (word) => word.isEmpty
+              ? word
+              : '${word[0].toUpperCase()}${word.substring(1)}',
+        )
+        .join(' ');
+    return 'Intro $titleCased';
+  }
+
   /// Short marketing headline for the intro offer, e.g. "First month for ₹1.".
   String get introOfferHeadline {
     final label = introductoryPeriodLabel;

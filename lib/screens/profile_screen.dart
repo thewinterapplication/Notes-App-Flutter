@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/subscription_plan.dart';
 import '../providers/auth_provider.dart';
+import '../providers/subscription_provider.dart';
 import 'splash_screen.dart';
 import 'subscription_screen.dart';
 
@@ -52,11 +54,14 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
     final subscription = authState.subscription;
+    final plan = SubscriptionPlan.introOfferFrom(
+      ref.watch(subscriptionProvider).plans,
+    );
 
     final String membershipSubtitle;
     if (subscription.isEntitled) {
       membershipSubtitle = subscription.isIntroTrialActive
-          ? 'Intro month active'
+          ? 'Intro ${plan?.introductoryPeriodLabel.replaceFirst('first ', '') ?? 'month'} active'
           : subscription.displayStatus;
     } else if (subscription.canUseIntroTrial) {
       membershipSubtitle = 'Start with your intro offer';
@@ -99,9 +104,9 @@ class ProfileScreen extends ConsumerWidget {
                         border: Border.all(color: Colors.white, width: 4),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF2D3E50).withValues(
-                              alpha: 0.18,
-                            ),
+                            color: const Color(
+                              0xFF2D3E50,
+                            ).withValues(alpha: 0.18),
                             blurRadius: 18,
                             offset: const Offset(0, 8),
                           ),
@@ -171,7 +176,10 @@ class ProfileScreen extends ConsumerWidget {
                   ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFFF44336),
-                    side: const BorderSide(color: Color(0xFFF44336), width: 1.4),
+                    side: const BorderSide(
+                      color: Color(0xFFF44336),
+                      width: 1.4,
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),

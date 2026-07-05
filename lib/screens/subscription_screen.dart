@@ -526,7 +526,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                     16,
                     8,
                     16,
-                    selectedPlan != null ? 220 : 188,
+                    selectedPlan != null ? 140 : 108,
                   ),
                   children: [
                     _HeroCard(
@@ -542,6 +542,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                       _LiveStatusCard(
                         subscription: authState.subscription,
                         formatDate: _formatDate,
+                        plan: introPlan,
                         onManageTap:
                             authState.subscription.isLive ||
                                 authState.subscription.isEntitled
@@ -595,18 +596,14 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                         ),
                       ),
                     const SizedBox(height: 8),
-                    _InfoStrip(
-                      icon: Icons.payments_outlined,
-                      title: 'UPI app handoff',
-                      subtitle:
-                          'On supported Android and iOS devices, Razorpay can surface installed apps like PhonePe, Google Pay and Paytm for a direct handoff.',
-                    ),
-                    const SizedBox(height: 12),
-                    const _InfoStrip(
-                      icon: Icons.verified_user_outlined,
-                      title: 'Backend verified',
-                      subtitle:
-                          'We verify the Razorpay payment signature on the server and keep webhooks as the source of truth for your membership state.',
+                    _CheckoutLegalFooter(
+                      onTermsTap: () => _openLegalPage(
+                        '/terms-and-conditions',
+                        'Terms and Conditions',
+                      ),
+                      onPrivacyTap: () =>
+                          _openLegalPage('/privacy-policy', 'Privacy Policy'),
+                      onPoliciesTap: _openPoliciesScreen,
                     ),
                     if (subscriptionState.errorMessage != null &&
                         subscriptionState.errorMessage!.isNotEmpty)
@@ -716,16 +713,6 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                           ),
                         ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              _CheckoutLegalFooter(
-                onTermsTap: () => _openLegalPage(
-                  '/terms-and-conditions',
-                  'Terms and Conditions',
-                ),
-                onPrivacyTap: () =>
-                    _openLegalPage('/privacy-policy', 'Privacy Policy'),
-                onPoliciesTap: _openPoliciesScreen,
               ),
             ],
           ),
@@ -907,11 +894,13 @@ class _LiveStatusCard extends StatelessWidget {
     required this.subscription,
     required this.formatDate,
     this.onManageTap,
+    this.plan,
   });
 
   final UserSubscription subscription;
   final String Function(DateTime?) formatDate;
   final VoidCallback? onManageTap;
+  final SubscriptionPlan? plan;
 
   @override
   Widget build(BuildContext context) {
@@ -975,7 +964,7 @@ class _LiveStatusCard extends StatelessWidget {
               _StatusMetric(
                 label: 'Intro offer',
                 value: subscription.isIntroTrialActive
-                    ? 'First month active'
+                    ? '${plan?.introductoryPeriodLabelCapitalized ?? 'First month'} active'
                     : subscription.hasUsedIntroTrial
                     ? 'Used'
                     : 'Available',
@@ -1012,6 +1001,17 @@ class _PlanCard extends StatelessWidget {
     final accent = _hexToColor(plan.accentColor);
     final surface = _hexToColor(plan.surfaceColor);
     final useIntroOffer = showIntroOffer && plan.hasIntroductoryOffer;
+    // The backend's plan copy (subtitle/benefits) is written assuming a
+    // month-long trial. When there's an active intro offer, override those
+    // two trial-specific lines with copy derived from the real trial length
+    // instead of the static backend text.
+    final displayBenefits = useIntroOffer
+        ? [
+            '${plan.introductoryPeriodLabelCapitalized} access for ${plan.introductoryAmountLabel}',
+            '${plan.recurringAmountLabel}/${plan.periodLabel} after your trial ends',
+            ...plan.benefits.skip(2),
+          ]
+        : plan.benefits;
 
     return GestureDetector(
       onTap: onTap,
@@ -1088,7 +1088,7 @@ class _PlanCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              plan.subtitle,
+              useIntroOffer ? plan.introOfferSummary : plan.subtitle,
               style: TextStyle(
                 fontSize: 13,
                 color: Colors.grey.shade700,
@@ -1136,7 +1136,7 @@ class _PlanCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            ...plan.benefits.map(
+            ...displayBenefits.map(
               (benefit) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Row(
@@ -1208,69 +1208,6 @@ class _StatusMetric extends StatelessWidget {
               fontSize: 13,
               fontWeight: FontWeight.w700,
               color: Color(0xFF111827),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoStrip extends StatelessWidget {
-  const _InfoStrip({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF3F4F6),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(icon, color: const Color(0xFF111827)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade700,
-                    height: 1.45,
-                  ),
-                ),
-              ],
             ),
           ),
         ],

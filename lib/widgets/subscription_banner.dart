@@ -42,7 +42,7 @@ class SubscriptionBanner extends StatelessWidget {
     final isActive = subscription.isEntitled;
     final title = isActive
         ? subscription.isIntroTrialActive
-              ? 'First month access is live'
+              ? '${plan?.introductoryPeriodLabelCapitalized ?? 'First month'} access is live'
               : 'Premium pass is live'
         : 'Unlock recurring access';
     final subtitle = isActive
@@ -113,7 +113,7 @@ class SubscriptionBanner extends StatelessWidget {
                   child: Text(
                     isActive
                         ? subscription.isIntroTrialActive
-                              ? 'Intro Month'
+                              ? (plan?.introBadgeLabel ?? 'Intro Month')
                               : subscription.displayStatus
                         : 'Premium Membership',
                     style: const TextStyle(

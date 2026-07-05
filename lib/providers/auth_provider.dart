@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,6 +7,7 @@ import '../globals.dart';
 import '../models/user_subscription.dart';
 import '../screens/auth/login_page.dart';
 import '../services/api_service.dart';
+import '../services/push_notification_service.dart';
 
 /// Authentication state
 class AuthState {
@@ -74,6 +77,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     if (isLoggedIn) {
       await refreshProfile();
+      // Best-effort — don't block app start on notification setup.
+      unawaited(PushNotificationService.init());
     }
   }
 
@@ -92,6 +97,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
 
     await refreshProfile();
+    // Best-effort — don't block login on notification setup.
+    unawaited(PushNotificationService.init());
   }
 
   /// Logout - clear the backend session, prefs, and reset state.

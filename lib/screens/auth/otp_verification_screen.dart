@@ -30,6 +30,7 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
   );
   final List<FocusNode> _focusNodes = List.generate(4, (index) => FocusNode());
   bool _isLoading = false;
+  bool _submitting = false;
   bool _isResending = false;
   late String _currentSessionId;
 
@@ -53,6 +54,10 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
   String get _otpValue => _otpControllers.map((c) => c.text).join();
 
   Future<void> _verifyOTP() async {
+    // Typing the 4th digit auto-submits; tapping Verify as well must not start
+    // a second login (that would mint a second token and revoke the first).
+    if (_submitting) return;
+
     if (_otpValue.length != 4) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -63,12 +68,20 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
       return;
     }
 
+    _submitting = true;
     setState(() => _isLoading = true);
+    try {
+      await _completeVerification();
+    } finally {
+      _submitting = false;
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
+  Future<void> _completeVerification() async {
     final result = await ApiService.verifyOTP(_currentSessionId, _otpValue);
 
     if (!mounted) return;
-    setState(() => _isLoading = false);
 
     if (result['success']) {
       // OTP verified successfully
@@ -100,8 +113,31 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
             ),
           );
         }
+      } else if (result['registered'] == true && result['hasSession'] == true) {
+        // /otp/verify already issued this device's one session token.
+        final user = result['data'];
+        final userName = (user is Map && user['name'] is String)
+            ? user['name'] as String
+            : widget.phoneNumber;
+
+        await ref.read(authProvider.notifier).login(userName, widget.phoneNumber);
+
+        if (mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+            (route) => false,
+          );
+        }
+      } else if (result['registered'] == false) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('User not found. Please register first.'),
+            backgroundColor: Colors.red,
+          ),
+        );
       } else {
-        // Complete login
+        // Test-number bypass (no server OTP) — log in directly.
         final loginResult = await ApiService.login(widget.phoneNumber);
         if (loginResult['success']) {
           final backendData = loginResult['data'];

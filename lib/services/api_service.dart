@@ -302,6 +302,9 @@ class ApiService {
           'success': true,
           'message': data['message'],
           'registered': data['registered'],
+          // True only when the backend issued this device's session token.
+          'hasSession': token != null && token.isNotEmpty,
+          'data': data['data'],
         };
       } else {
         return {'success': false, 'message': data['message'] ?? 'Invalid OTP'};
